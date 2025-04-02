@@ -1,0 +1,23 @@
+{
+  "name": "obstacle-course-challenge",
+  "version": "1.0.0",
+  "description": "A 3D obstacle course game for kids to create and play",
+  "main": "index.html",
+  "scripts": {
+    "start": "http-server -p 8080",
+    "deploy": "gh-pages -d ."
+  },
+  "keywords": [
+    "game",
+    "3d",
+    "obstacle",
+    "course",
+    "kids"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "gh-pages": "^5.0.0",
+    "http-server": "^14.1.1"
+  }
+} 
