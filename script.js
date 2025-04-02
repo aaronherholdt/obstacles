@@ -1158,6 +1158,11 @@ function togglePlayMode() {
     const buildUIElements = document.querySelectorAll('#ui-controls, #props-selector, #material-selector');
     const mobileControls = document.getElementById('mobile-controls');
     
+    // Ensure mobile control styles are properly applied
+    if (isPlayMode && isMobile) {
+        ensureMobileControlStyles();
+    }
+    
     // Create a brief fade effect by adding a transition overlay
     const transitionOverlay = document.createElement('div');
     transitionOverlay.id = 'mode-transition';
@@ -1343,6 +1348,152 @@ function togglePlayMode() {
                 removeMobileTouchControls();
             }
         }
+    }
+}
+
+// Function to ensure mobile control styles are properly applied
+function ensureMobileControlStyles() {
+    // Check if the styles already exist
+    let mobileStylesExist = false;
+    const styleSheets = document.styleSheets;
+    
+    for (let i = 0; i < styleSheets.length; i++) {
+        try {
+            const rules = styleSheets[i].cssRules || styleSheets[i].rules;
+            if (rules) {
+                for (let j = 0; j < rules.length; j++) {
+                    if (rules[j].selectorText && rules[j].selectorText.includes('#mobile-controls')) {
+                        mobileStylesExist = true;
+                        break;
+                    }
+                }
+            }
+            if (mobileStylesExist) break;
+        } catch (e) {
+            // Cross-origin stylesheet, skip it
+            continue;
+        }
+    }
+    
+    // If styles don't exist, inject them
+    if (!mobileStylesExist) {
+        const mobileStyles = document.createElement('style');
+        mobileStyles.textContent = `
+            /* Mobile Controls */
+            #mobile-controls {
+                display: none; /* Hidden by default */
+                position: absolute;
+                z-index: 100;
+                width: 100%;
+                height: 100%;
+                pointer-events: none; /* Allow clicks to pass through except for controls */
+                touch-action: none; /* Prevent browser handling of touches */
+            }
+            
+            /* Only show mobile controls on tablets and mobile devices */
+            @media (max-width: 1024px) and (pointer: coarse), (hover: none) {
+                #mobile-controls.mobile-active {
+                    display: block;
+                }
+            }
+            
+            /* Hide mobile controls on laptops/desktops */
+            @media (min-width: 1025px), (pointer: fine) {
+                #mobile-controls {
+                    display: none !important;
+                }
+            }
+            
+            /* Virtual joystick container */
+            #virtual-joystick {
+                position: absolute;
+                bottom: 100px;
+                right: 100px;
+                width: 120px;
+                height: 120px;
+                background-color: rgba(255, 255, 255, 0.2);
+                border-radius: 60px;
+                border: 2px solid rgba(255, 255, 255, 0.3);
+                pointer-events: auto;
+                touch-action: none;
+            }
+            
+            #joystick-knob {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                width: 50px;
+                height: 50px;
+                background-color: rgba(255, 255, 255, 0.5);
+                border-radius: 25px;
+                border: 2px solid rgba(255, 255, 255, 0.7);
+                pointer-events: none; /* The knob itself doesn't need pointer events */
+            }
+            
+            /* Jump button */
+            #jump-button {
+                position: absolute;
+                bottom: 100px;
+                left: 100px;
+                width: 80px;
+                height: 80px;
+                background-color: rgba(255, 255, 255, 0.2);
+                border-radius: 40px;
+                border: 2px solid rgba(255, 255, 255, 0.3);
+                pointer-events: auto;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                touch-action: none;
+            }
+            
+            #jump-button-icon {
+                width: 40px;
+                height: 40px;
+                fill: rgba(255, 255, 255, 0.7);
+            }
+            
+            /* Media queries for different device sizes */
+            @media (max-width: 768px) {
+                #virtual-joystick {
+                    bottom: 80px;
+                    right: 60px;
+                }
+                
+                #jump-button {
+                    bottom: 80px;
+                    left: 60px;
+                }
+            }
+            
+            @media (max-width: 480px) {
+                #virtual-joystick {
+                    bottom: 60px;
+                    right: 40px;
+                    width: 100px;
+                    height: 100px;
+                }
+                
+                #joystick-knob {
+                    width: 40px;
+                    height: 40px;
+                }
+                
+                #jump-button {
+                    bottom: 60px;
+                    left: 40px;
+                    width: 70px;
+                    height: 70px;
+                }
+                
+                #jump-button-icon {
+                    width: 35px;
+                    height: 35px;
+                }
+            }
+        `;
+        document.head.appendChild(mobileStyles);
     }
 }
 
@@ -2001,11 +2152,48 @@ function handleMouseWheel(event) {
 
 // Initialize mobile touch controls
 function initMobileTouchControls() {
-    // Virtual joystick element
+    // Check if mobile controls elements exist, create them if not
+    let mobileControls = document.getElementById('mobile-controls');
+    
+    // If mobile controls don't exist, create the elements dynamically
+    if (!mobileControls) {
+        // Create the mobile controls container
+        mobileControls = document.createElement('div');
+        mobileControls.id = 'mobile-controls';
+        
+        // Create the virtual joystick
+        const joystickElement = document.createElement('div');
+        joystickElement.id = 'virtual-joystick';
+        
+        // Create the joystick knob
+        const joystickKnob = document.createElement('div');
+        joystickKnob.id = 'joystick-knob';
+        joystickElement.appendChild(joystickKnob);
+        
+        // Create the jump button
+        const jumpButton = document.createElement('div');
+        jumpButton.id = 'jump-button';
+        
+        // Create the jump button icon (SVG)
+        jumpButton.innerHTML = `
+            <svg id="jump-button-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path d="M8 12l4-4 4 4H8z"/>
+                <path d="M12 16V8"/>
+            </svg>
+        `;
+        
+        // Add the elements to the mobile controls container
+        mobileControls.appendChild(joystickElement);
+        mobileControls.appendChild(jumpButton);
+        
+        // Add the mobile controls to the document body
+        document.body.appendChild(mobileControls);
+    }
+    
+    // Get references to elements (whether they existed before or were just created)
     const joystickElement = document.getElementById('virtual-joystick');
     const joystickKnob = document.getElementById('joystick-knob');
     const jumpButton = document.getElementById('jump-button');
-    const mobileControls = document.getElementById('mobile-controls');
     
     // Joystick touch event handlers
     joystickElement.addEventListener('touchstart', handleJoystickStart);
