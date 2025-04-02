@@ -11,6 +11,7 @@ let elapsedTime = 0;
 let timerDisplay = null;
 let countdownInterval = null;
 let isCountingDown = false;
+let canCharacterMove = false; // Track whether the character can move
 
 // Mobile detection function
 function isMobileOrTablet() {
@@ -1145,6 +1146,9 @@ const maxVerticalAngle = Math.PI - 0.1; // Almost horizontal (looking down)
 function togglePlayMode() {
     isPlayMode = !isPlayMode;
     
+    // Reset character movement flag when toggling modes
+    canCharacterMove = false;
+    
     // Update back button text based on mode
     if (startInPlayMode && isPlayMode) {
         backButton.innerHTML = `
@@ -1630,30 +1634,46 @@ function updateCameraPosition() {
 
 // Keyboard event handlers for character movement
 function handleKeyDown(event) {
-    if (!isPlayMode || isCountingDown) return;
+    if (!isPlayMode) return;
     
-    keysPressed[event.key.toLowerCase()] = true;
+    const key = event.key.toLowerCase();
     
-    // Prevent default behavior for arrow keys and space
-    if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(event.key.toLowerCase())) {
-        event.preventDefault();
+    // Always allow Escape key to exit play mode regardless of character movement state
+    if (key === 'escape' && !startInPlayMode) {
+        togglePlayMode();
+        return;
     }
     
-    // Exit play mode with Escape key only if not a predefined course
-    if (event.key === 'Escape' && !startInPlayMode) {
-        togglePlayMode();
+    // Only process movement keys if character can move
+    if (!canCharacterMove && ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(key)) {
+        event.preventDefault();
+        return;
+    }
+    
+    keysPressed[key] = true;
+    
+    // Prevent default behavior for arrow keys and space
+    if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(key)) {
+        event.preventDefault();
     }
 }
 
 function handleKeyUp(event) {
-    if (!isPlayMode || isCountingDown) return;
+    if (!isPlayMode) return;
     
-    keysPressed[event.key.toLowerCase()] = false;
+    const key = event.key.toLowerCase();
+    
+    // Only process movement keys if character can move
+    if (!canCharacterMove && ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(key)) {
+        return;
+    }
+    
+    keysPressed[key] = false;
 }
 
 // Function to update character movement based on keyboard input and touch input
 function updateCharacterMovement() {
-    if (!character || !isPlayMode || isCountingDown) return;
+    if (!character || !isPlayMode || isCountingDown || !canCharacterMove) return;
     
     // Get the delta time
     const deltaTime = clock.getDelta() * 60; // Convert to a normalized time step
@@ -1841,6 +1861,9 @@ function showCompletionDialog() {
 function restartLevel() {
     // Stop any existing timer or countdown
     stopTimer();
+    
+    // Disable character movement until start button is pressed again
+    canCharacterMove = false;
     
     // Reset the character to start position
     if (character && character.startPosition) {
@@ -2408,7 +2431,7 @@ function isControlElement(element) {
 }
 
 function handleJoystickStart(event) {
-    if (isCountingDown) return;
+    if (isCountingDown || !canCharacterMove) return;
     
     event.preventDefault();
     joystickActive = true;
@@ -2416,7 +2439,7 @@ function handleJoystickStart(event) {
 }
 
 function handleJoystickMove(event) {
-    if (isCountingDown) return;
+    if (isCountingDown || !canCharacterMove) return;
     
     event.preventDefault();
     if (joystickActive) {
@@ -2433,7 +2456,7 @@ function handleJoystickEnd(event) {
 }
 
 function updateJoystickPosition(event) {
-    if (isCountingDown) return;
+    if (isCountingDown || !canCharacterMove) return;
     
     const joystickElement = document.getElementById('virtual-joystick');
     const joystickKnob = document.getElementById('joystick-knob');
@@ -2468,7 +2491,7 @@ function updateJoystickPosition(event) {
 }
 
 function handleJumpStart(event) {
-    if (isCountingDown) return;
+    if (isCountingDown || !canCharacterMove) return;
     
     event.preventDefault();
     jumpButtonActive = true;
@@ -2482,8 +2505,6 @@ function handleJumpEnd(event) {
 }
 
 function handlePinchStart(event) {
-    if (isCountingDown) return;
-    
     if (event.touches.length !== 2) return;
     
     const touch1 = event.touches[0];
@@ -2497,8 +2518,6 @@ function handlePinchStart(event) {
 }
 
 function handlePinchMove(event) {
-    if (isCountingDown) return;
-    
     if (event.touches.length !== 2) return;
     event.preventDefault();
     
@@ -2587,6 +2606,9 @@ function startCountdown() {
             
             // Remove countdown class
             timerDisplay.classList.remove('countdown');
+            
+            // Enable character movement
+            canCharacterMove = true;
             
             // Start the timer after countdown
             startTimer();
