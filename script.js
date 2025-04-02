@@ -1284,6 +1284,8 @@ function togglePlayMode() {
             // Show mobile controls if on mobile device
             if (isMobile) {
                 mobileControls.classList.add('mobile-active');
+                // Explicitly set display style to ensure visibility
+                mobileControls.style.display = 'block';
                 // Initialize mobile touch events
                 initMobileTouchControls();
             }
@@ -1393,7 +1395,7 @@ function ensureMobileControlStyles() {
             /* Only show mobile controls on tablets and mobile devices */
             @media (max-width: 1024px) and (pointer: coarse), (hover: none) {
                 #mobile-controls.mobile-active {
-                    display: block;
+                    display: block !important;
                 }
             }
             
@@ -1467,6 +1469,7 @@ function ensureMobileControlStyles() {
                 }
             }
             
+            /* Smaller phones */
             @media (max-width: 480px) {
                 #virtual-joystick {
                     bottom: 60px;
@@ -1490,6 +1493,40 @@ function ensureMobileControlStyles() {
                 #jump-button-icon {
                     width: 35px;
                     height: 35px;
+                }
+            }
+            
+            /* Landscape orientation for tablets and mobile devices */
+            @media (orientation: landscape) and (max-height: 768px) {
+                #virtual-joystick {
+                    bottom: 20px;
+                    right: 20px;
+                    width: 90px;
+                    height: 90px;
+                }
+                
+                #joystick-knob {
+                    width: 35px;
+                    height: 35px;
+                }
+                
+                #jump-button {
+                    bottom: 20px;
+                    left: 20px;
+                    width: 70px;
+                    height: 70px;
+                }
+                
+                #jump-button-icon {
+                    width: 30px;
+                    height: 30px;
+                }
+            }
+            
+            /* Ensure controls are visible regardless of orientation */
+            @media screen and (orientation: landscape), screen and (orientation: portrait) {
+                #mobile-controls.mobile-active {
+                    display: block !important;
                 }
             }
         `;
@@ -2213,6 +2250,37 @@ function initMobileTouchControls() {
     document.addEventListener('touchstart', handleTouchRotateStart);
     document.addEventListener('touchmove', handleTouchRotateMove);
     document.addEventListener('touchend', handleTouchRotateEnd);
+    
+    // Add orientation change listener
+    window.addEventListener("orientationchange", handleOrientationChange);
+    window.addEventListener("resize", handleOrientationChange);
+    
+    // Force update on initial load to ensure controls are visible
+    handleOrientationChange();
+}
+
+// Handle orientation changes
+function handleOrientationChange() {
+    if (!isPlayMode || !isMobile) return;
+    
+    // Get the mobile controls
+    const mobileControls = document.getElementById('mobile-controls');
+    if (!mobileControls) return;
+    
+    // Force the controls to be visible
+    setTimeout(() => {
+        if (mobileControls.classList.contains('mobile-active')) {
+            // Force a repaint by toggling the class
+            mobileControls.classList.remove('mobile-active');
+            // Force browser to process the change
+            void mobileControls.offsetWidth;
+            // Add it back
+            mobileControls.classList.add('mobile-active');
+            
+            // Explicitly set display style to ensure visibility
+            mobileControls.style.display = 'block';
+        }
+    }, 200); // Short delay to allow orientation change to complete
 }
 
 // Remove mobile touch controls
