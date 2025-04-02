@@ -367,19 +367,19 @@ canvas {
     z-index: 100;
     width: 100%;
     height: 100%;
-    pointer-events: none; /* Allow clicks to pass through except for controls */
-    touch-action: none; /* Prevent browser handling of touches */
+    pointer-events: none;
+    touch-action: none;
 }
 
-/* Only show mobile controls on tablets and mobile devices */
-@media (max-width: 1024px) and (pointer: coarse), (hover: none) {
+/* Show mobile controls on devices with coarse pointers or no hover */
+@media (pointer: coarse), (hover: none) {
     #mobile-controls.mobile-active {
-        display: block;
+        display: block !important;
     }
 }
 
-/* Hide mobile controls on laptops/desktops */
-@media (min-width: 1025px), (pointer: fine) {
+/* Hide mobile controls on devices with fine pointers and hover capability */
+@media (pointer: fine) and (hover: hover) {
     #mobile-controls {
         display: none !important;
     }
