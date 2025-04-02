@@ -4,6 +4,14 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { MOUSE } from 'three'; // Import MOUSE enum
 import { Character } from './character.js'; // Import Character class
 
+// Variables for timer functionality
+let timerStartTime = 0;
+let timerInterval = null;
+let elapsedTime = 0;
+let timerDisplay = null;
+let countdownInterval = null;
+let isCountingDown = false;
+
 // Mobile detection function
 function isMobileOrTablet() {
     const userAgent = navigator.userAgent || navigator.vendor || window.opera;
@@ -1215,6 +1223,12 @@ function togglePlayMode() {
                 modeIndicator.textContent = 'Mode: Test';
             }
             
+            // Create and display the timer
+            createTimerDisplay();
+            
+            // Don't start the timer automatically - wait for button press
+            // startTimer(); <- Remove or comment this line
+            
             // Show controls info
             controlsInfo.classList.add('visible');
             
@@ -1290,6 +1304,19 @@ function togglePlayMode() {
                 initMobileTouchControls();
             }
         } else {
+            // Exit play mode - show play button to let user enter play mode
+            // Stop the timer when exiting play mode
+            stopTimer();
+
+            // Remove timer display
+            if (timerDisplay) {
+                timerDisplay.remove();
+                timerDisplay = null;
+            }
+
+            // Hide the timer container
+            document.getElementById('timer-container').style.display = 'none';
+            
             // Exit play mode - show play button to let user enter play mode
             modeToggleButton.innerHTML = `
                 <svg class="mode-icon play-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
@@ -1603,6 +1630,8 @@ function updateCameraPosition() {
 
 // Keyboard event handlers for character movement
 function handleKeyDown(event) {
+    if (!isPlayMode || isCountingDown) return;
+    
     keysPressed[event.key.toLowerCase()] = true;
     
     // Prevent default behavior for arrow keys and space
@@ -1617,12 +1646,14 @@ function handleKeyDown(event) {
 }
 
 function handleKeyUp(event) {
+    if (!isPlayMode || isCountingDown) return;
+    
     keysPressed[event.key.toLowerCase()] = false;
 }
 
-// Function to update the character movement based on keyboard input and touch input
+// Function to update character movement based on keyboard input and touch input
 function updateCharacterMovement() {
-    if (!character || !isPlayMode) return;
+    if (!character || !isPlayMode || isCountingDown) return;
     
     // Get the delta time
     const deltaTime = clock.getDelta() * 60; // Convert to a normalized time step
@@ -1716,6 +1747,9 @@ function updateCharacterMovement() {
 
 // Show completion dialog when a level is completed
 function showCompletionDialog() {
+    // Stop the timer when completing the level
+    stopTimer();
+    
     // Check if an overlay already exists
     let overlay = document.getElementById('completion-overlay');
     if (overlay) return; // If it exists, don't create another one
@@ -1750,7 +1784,15 @@ function showCompletionDialog() {
 
     const message = document.createElement('p');
     message.textContent = 'Congratulations! You have completed this obstacle course.';
-    message.style.marginBottom = '30px';
+    message.style.marginBottom = '20px';
+
+    // Add time information
+    const timeInfo = document.createElement('p');
+    timeInfo.textContent = `Your time: ${formatTime(elapsedTime)}`;
+    timeInfo.style.marginBottom = '30px';
+    timeInfo.style.fontSize = '1.2rem';
+    timeInfo.style.fontWeight = 'bold';
+    timeInfo.style.color = '#FFFF00';
 
     const buttonContainer = document.createElement('div');
     buttonContainer.style.display = 'flex';
@@ -1789,6 +1831,7 @@ function showCompletionDialog() {
     buttonContainer.appendChild(returnButton);
     dialog.appendChild(title);
     dialog.appendChild(message);
+    dialog.appendChild(timeInfo);
     dialog.appendChild(buttonContainer);
     overlay.appendChild(dialog);
     document.body.appendChild(overlay);
@@ -1796,31 +1839,34 @@ function showCompletionDialog() {
 
 // Restart the current level
 function restartLevel() {
-    // Exit play mode if currently in it
-    if (isPlayMode) {
-        togglePlayMode();
+    // Stop any existing timer or countdown
+    stopTimer();
+    
+    // Reset the character to start position
+    if (character && character.startPosition) {
+        const respawnEffect = createRespawnEffect(character.mesh.position, () => {
+            character.mesh.position.copy(character.startPosition);
+            character.velocity.set(0, 0, 0);
+            character.isJumping = false;
+            
+            // Reset the timer display
+            if (timerDisplay) {
+                timerDisplay.textContent = '00:00.0';
+            }
+            
+            // Show the start button again
+            const startButton = document.getElementById('start-button');
+            if (startButton) {
+                startButton.style.display = 'inline-block';
+            }
+        });
     }
     
-    // Wait for exit to complete, then re-enter play mode
-    setTimeout(() => {
-        if (character) {
-            // Reset character position to start marker
-            const startPosition = startMarker 
-                ? startMarker.position.clone().add(new THREE.Vector3(0, 1, 0)) 
-                : new THREE.Vector3(0, 1, 0);
-            character.mesh.position.copy(startPosition);
-            character.velocity.set(0, 0, 0); // Reset velocity
-        }
-        
-        // Create respawn effect and enter play mode
-        if (startMarker) {
-            createRespawnEffect(startMarker.position.clone().add(new THREE.Vector3(0, 1, 0)), () => {
-                togglePlayMode();
-            });
-        } else {
-            togglePlayMode();
-        }
-    }, 500);
+    // Remove any overlay if it exists
+    const overlay = document.getElementById('completion-overlay');
+    if (overlay) {
+        overlay.remove();
+    }
 }
 
 // Create a respawn effect
@@ -2309,8 +2355,10 @@ function removeMobileTouchControls() {
     document.removeEventListener('touchend', handleTouchRotateEnd);
 }
 
-// Mobile touch handlers
+// Mobile touch controls functions
 function handleTouchRotateStart(event) {
+    if (isCountingDown) return;
+    
     // Only activate camera rotation if touch is not on joystick or jump button
     if (!isControlElement(event.target)) {
         touchRotateActive = true;
@@ -2320,7 +2368,9 @@ function handleTouchRotateStart(event) {
 }
 
 function handleTouchRotateMove(event) {
-    if (touchRotateActive && event.touches.length === 1) {
+    if (isCountingDown) return;
+    
+    if (event.touches.length === 1) {
         const touchX = event.touches[0].clientX;
         const touchY = event.touches[0].clientY;
         
@@ -2358,12 +2408,16 @@ function isControlElement(element) {
 }
 
 function handleJoystickStart(event) {
+    if (isCountingDown) return;
+    
     event.preventDefault();
     joystickActive = true;
     updateJoystickPosition(event);
 }
 
 function handleJoystickMove(event) {
+    if (isCountingDown) return;
+    
     event.preventDefault();
     if (joystickActive) {
         updateJoystickPosition(event);
@@ -2379,6 +2433,8 @@ function handleJoystickEnd(event) {
 }
 
 function updateJoystickPosition(event) {
+    if (isCountingDown) return;
+    
     const joystickElement = document.getElementById('virtual-joystick');
     const joystickKnob = document.getElementById('joystick-knob');
     const touch = event.touches[0];
@@ -2412,6 +2468,8 @@ function updateJoystickPosition(event) {
 }
 
 function handleJumpStart(event) {
+    if (isCountingDown) return;
+    
     event.preventDefault();
     jumpButtonActive = true;
     keysPressed[' '] = true; // Simulate space key press
@@ -2424,6 +2482,8 @@ function handleJumpEnd(event) {
 }
 
 function handlePinchStart(event) {
+    if (isCountingDown) return;
+    
     if (event.touches.length !== 2) return;
     
     const touch1 = event.touches[0];
@@ -2437,6 +2497,8 @@ function handlePinchStart(event) {
 }
 
 function handlePinchMove(event) {
+    if (isCountingDown) return;
+    
     if (event.touches.length !== 2) return;
     event.preventDefault();
     
@@ -2466,4 +2528,124 @@ function handlePinchMove(event) {
 function handlePinchEnd(event) {
     // Reset tracking
     lastPointerDistance = 0;
+}
+
+// Function to create timer display
+function createTimerDisplay() {
+    // Get the timer container
+    const timerContainer = document.getElementById('timer-container');
+    
+    // Remove existing timer if any
+    if (timerDisplay) {
+        timerDisplay.remove();
+    }
+    
+    // Create timer display element
+    timerDisplay = document.createElement('div');
+    timerDisplay.id = 'timer-display';
+    timerDisplay.textContent = '00:00.0';
+    
+    // Create start button
+    const startButton = document.createElement('button');
+    startButton.id = 'start-button';
+    startButton.textContent = 'Start';
+    startButton.addEventListener('click', startCountdown);
+    
+    // Add start button and timer to the container
+    timerContainer.appendChild(startButton);
+    timerContainer.appendChild(timerDisplay);
+    timerContainer.style.display = 'block';
+}
+
+// Function to start the countdown
+function startCountdown() {
+    // Hide the start button
+    const startButton = document.getElementById('start-button');
+    if (startButton) {
+        startButton.style.display = 'none';
+    }
+    
+    // Set countdown flag
+    isCountingDown = true;
+    
+    // Add countdown class for styling
+    timerDisplay.classList.add('countdown');
+    
+    // Show countdown in the timer display
+    timerDisplay.textContent = '3';
+    
+    let count = 3;
+    countdownInterval = setInterval(() => {
+        count--;
+        if (count > 0) {
+            timerDisplay.textContent = count.toString();
+        } else {
+            // Clear countdown interval
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+            isCountingDown = false;
+            
+            // Remove countdown class
+            timerDisplay.classList.remove('countdown');
+            
+            // Start the timer after countdown
+            startTimer();
+        }
+    }, 1000);
+}
+
+// Function to start the timer
+function startTimer() {
+    // Reset existing timer if any
+    if (timerInterval) {
+        clearInterval(timerInterval);
+    }
+    
+    // Reset timer values
+    timerStartTime = Date.now();
+    elapsedTime = 0;
+    
+    // Start interval to update timer display
+    timerInterval = setInterval(updateTimer, 100); // Update every 100ms for decisecond precision
+}
+
+// Function to update the timer
+function updateTimer() {
+    if (!isPlayMode || isCountingDown) return;
+    
+    // Calculate elapsed time
+    elapsedTime = Date.now() - timerStartTime;
+    
+    // Update display if it exists
+    if (timerDisplay) {
+        timerDisplay.textContent = formatTime(elapsedTime);
+    }
+}
+
+// Function to stop the timer
+function stopTimer() {
+    if (countdownInterval) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+        isCountingDown = false;
+    }
+    
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    }
+}
+
+// Function to format time as MM:SS.d
+function formatTime(milliseconds) {
+    const totalSeconds = milliseconds / 1000;
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = Math.floor(totalSeconds % 60);
+    const deciseconds = Math.floor((totalSeconds % 1) * 10);
+    
+    // Format with leading zeros
+    const formattedMinutes = String(minutes).padStart(2, '0');
+    const formattedSeconds = String(seconds).padStart(2, '0');
+    
+    return `${formattedMinutes}:${formattedSeconds}.${deciseconds}`;
 } 
