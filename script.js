@@ -39,6 +39,7 @@ let lastPointerDistance = 0;
 let touchRotateActive = false;
 let lastTouchX = 0;
 let lastTouchY = 0;
+let joystickSensitivity = 0.6; // New variable to control joystick sensitivity (values from 0.1 to 1.0)
 
 // Check URL parameters to see if we should start in play mode
 const urlParams = new URLSearchParams(window.location.search);
@@ -2485,9 +2486,9 @@ function updateJoystickPosition(event) {
     // Update joystick knob position
     joystickKnob.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
     
-    // Normalize values for character movement (-1 to 1)
-    joystickPosition.x = x / maxDistance;
-    joystickPosition.y = -y / maxDistance; // Invert Y for forward/backward movement
+    // Normalize values for character movement (-1 to 1) and apply sensitivity factor
+    joystickPosition.x = (x / maxDistance) * joystickSensitivity;
+    joystickPosition.y = (-y / maxDistance) * joystickSensitivity; // Invert Y for forward/backward movement
 }
 
 function handleJumpStart(event) {
