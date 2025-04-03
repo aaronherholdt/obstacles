@@ -1163,9 +1163,29 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
             <div class="course-title">${course.title}</div>
             <div class="course-description">${course.description}</div>
+            <div class="course-actions">
+                <button class="play-course-btn">Play</button>
+                <button class="leaderboard-btn">Leaderboard</button>
+            </div>
         `;
         
-        // Add click event to play the course
+        // Add play button click event
+        const playButton = courseDiv.querySelector('.play-course-btn');
+        playButton.addEventListener('click', function(e) {
+            e.stopPropagation();
+            playCourse(course);
+        });
+        
+        // Add leaderboard button click event
+        const leaderboardButton = courseDiv.querySelector('.leaderboard-btn');
+        leaderboardButton.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (window.leaderboardManager) {
+                window.leaderboardManager.showLeaderboardOverlay(course.id, course.title);
+            }
+        });
+        
+        // Also add click event to the entire course item to play it (backward compatibility)
         courseDiv.addEventListener('click', function() {
             playCourse(course);
         });
@@ -1225,4 +1245,4 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Call init to start everything
     init();
-}); 
+});
