@@ -365,4 +365,55 @@ footer {
     #title-container h1 {
         font-size: 2.5rem;
     }
+}
+
+/* Styling for course action buttons */
+.course-actions {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.play-course-btn, .leaderboard-btn {
+    flex: 1;
+    padding: 8px 0;
+    border: none;
+    border-radius: 4px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.9rem;
+}
+
+.play-course-btn {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.leaderboard-btn {
+    background-color: #2196F3;
+    color: white;
+}
+
+.play-course-btn:hover, .leaderboard-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.play-course-btn:active, .leaderboard-btn:active {
+    transform: scale(0.95);
+}
+
+/* Responsive adjustments for the buttons */
+@media (max-width: 480px) {
+    .course-actions {
+        flex-direction: column;
+        gap: 5px;
+    }
+    
+    .play-course-btn, .leaderboard-btn {
+        padding: 6px 0;
+        font-size: 0.8rem;
+    }
 } 
