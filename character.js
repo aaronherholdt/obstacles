@@ -32,6 +32,11 @@ export class Character {
         this.lastTeleportTime = 0;
         this.teleportCooldown = 1000; // ms
         
+        // Teleport visualization
+        this.currentTeleportBlock = null;
+        this.targetTeleportBlock = null;
+        this.teleportBeam = null;
+        
         // Create character mesh
         const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x4285F4 });
         
@@ -178,14 +183,62 @@ export class Character {
                 this.explosionTimer = null;
                 this.currentExplosionBlock = null;
             }
+            
+            // Remove teleport beam if we leave a teleport block
+            if (this.currentTeleportBlock && this.teleportBeam) {
+                this.removeBeam();
+                this.currentTeleportBlock = null;
+                this.targetTeleportBlock = null;
+            }
         }
         
-        // Handle teleport cooldown
+        // Check for teleport blocks and show beam to destination
         if (this.currentSurface === 'teleport' && this.isGrounded) {
-            const currentTime = Date.now();
-            if (currentTime - this.lastTeleportTime > this.teleportCooldown) {
-                this.teleport(blocks);
-                this.lastTeleportTime = currentTime;
+            // Update the currentTeleportBlock and find the target
+            const teleportBlocks = blocks.filter(block => block.userData.type === 'teleport');
+            if (teleportBlocks.length >= 2) {
+                const currentBlockIndex = teleportBlocks.findIndex(block => 
+                    Math.abs(block.position.x - this.mesh.position.x) < 1 && 
+                    Math.abs(block.position.z - this.mesh.position.z) < 1);
+                
+                // If we're on a teleport block
+                if (currentBlockIndex !== -1) {
+                    const currentBlock = teleportBlocks[currentBlockIndex];
+                    
+                    // If we're on a new teleport block or don't have a target yet
+                    if (this.currentTeleportBlock !== currentBlock || !this.targetTeleportBlock) {
+                        // First remove any existing beam
+                        this.removeBeam();
+                        
+                        this.currentTeleportBlock = currentBlock;
+                        
+                        // Find a consistent target teleport block rather than random
+                        // We use modulo to make sure we always get the same destination
+                        // when standing on a particular teleport block
+                        const possibleTargets = teleportBlocks.filter(block => block !== currentBlock);
+                        
+                        if (possibleTargets.length > 0) {
+                            // Use the current block's position values to generate a consistent index
+                            // This ensures the same teleport block always leads to the same destination
+                            const positionHash = Math.abs(
+                                Math.floor(currentBlock.position.x * 100) + 
+                                Math.floor(currentBlock.position.z * 100)
+                            );
+                            const targetIndex = positionHash % possibleTargets.length;
+                            this.targetTeleportBlock = possibleTargets[targetIndex];
+                            
+                            // Create the beam to show destination
+                            this.createTeleportBeam(currentBlock, this.targetTeleportBlock);
+                        }
+                    }
+                    
+                    // Handle actual teleportation with cooldown
+                    const currentTime = Date.now();
+                    if (currentTime - this.lastTeleportTime > this.teleportCooldown && this.targetTeleportBlock) {
+                        this.teleport(blocks);
+                        this.lastTeleportTime = currentTime;
+                    }
+                }
             }
         }
         
@@ -589,44 +642,265 @@ export class Character {
     
     // Handle teleportation
     teleport(blocks) {
-        // Find all teleport blocks
-        const teleportBlocks = blocks.filter(block => block.userData.type === 'teleport');
-        
-        // Need at least 2 teleport blocks to teleport
-        if (teleportBlocks.length < 2) return;
-        
-        // Find our current block and a random different target
-        const currentBlockIndex = teleportBlocks.findIndex(block => 
-            Math.abs(block.position.x - this.mesh.position.x) < 1 && 
-            Math.abs(block.position.z - this.mesh.position.z) < 1);
-        
-        if (currentBlockIndex === -1) return;
-        
-        // Generate an array of possible targets (excludes current block)
-        const possibleTargets = teleportBlocks.filter((_, index) => index !== currentBlockIndex);
-        
-        // Select random target
-        const targetBlock = possibleTargets[Math.floor(Math.random() * possibleTargets.length)];
+        // We already have the target block selected in the update method
+        if (!this.targetTeleportBlock) return;
         
         // Create teleport effect at current position
         this.createTeleportEffect(this.mesh.position.clone());
         
-        // Teleport character - position properly above the target block
         // Get the height of the target teleport block
-        const targetBox = new THREE.Box3().setFromObject(targetBlock);
+        const targetBox = new THREE.Box3().setFromObject(this.targetTeleportBlock);
         const blockTop = targetBox.max.y;
         
+        // Remove beam and visual indicators before teleporting
+        this.removeBeam();
+        
+        // Teleport character to the target position
         this.mesh.position.set(
-            targetBlock.position.x,
+            this.targetTeleportBlock.position.x,
             blockTop + this.height/2 + 0.001,
-            targetBlock.position.z
+            this.targetTeleportBlock.position.z
         );
         
         // Reset vertical velocity to prevent falling
         this.velocity.y = 0;
         
-        // Create teleport effect at target position
+        // Create teleport effect at the target position
         this.createTeleportEffect(this.mesh.position.clone());
+        
+        // Update our current block to the target (we're now standing on it)
+        const previousBlock = this.currentTeleportBlock;
+        this.currentTeleportBlock = this.targetTeleportBlock;
+        this.targetTeleportBlock = null;
+        
+        // Find new target block from this position
+        const teleportBlocks = blocks.filter(block => block.userData.type === 'teleport');
+        if (teleportBlocks.length >= 2) {
+            // Filter out our current position
+            const possibleTargets = teleportBlocks.filter(block => block !== this.currentTeleportBlock);
+            
+            // If we have a previous block, prioritize it as our next destination
+            if (previousBlock && possibleTargets.includes(previousBlock)) {
+                this.targetTeleportBlock = previousBlock;
+            } else {
+                // Get consistent target based on block index
+                const currentIndex = teleportBlocks.indexOf(this.currentTeleportBlock);
+                const targetIndex = currentIndex % possibleTargets.length;
+                this.targetTeleportBlock = possibleTargets[targetIndex];
+            }
+            
+            // Create a new beam to the next destination
+            if (this.targetTeleportBlock) {
+                this.createTeleportBeam(this.currentTeleportBlock, this.targetTeleportBlock);
+            }
+        }
+    }
+    
+    // Create a visual beam between teleport blocks
+    createTeleportBeam(sourceBlock, targetBlock) {
+        // Remove existing beam if there is one
+        this.removeBeam();
+        
+        // Update block materials to show connection
+        this.highlightConnectedBlocks(sourceBlock, targetBlock);
+        
+        // Create a beam between the source and target teleport blocks
+        const start = sourceBlock.position.clone();
+        const end = targetBlock.position.clone();
+        
+        // Raise the beam slightly above the blocks
+        start.y += 0.5;
+        end.y += 0.5;
+        
+        // Create a curve for the beam to follow
+        const points = [];
+        const midPoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+        
+        // Add vertical arc to the beam
+        midPoint.y += Math.min(start.distanceTo(end) * 0.3, 3); // Arc height proportional to distance
+        
+        // Create a quadratic bezier curve
+        const curve = new THREE.QuadraticBezierCurve3(start, midPoint, end);
+        
+        // Sample curve points
+        const segments = 30;
+        for (let i = 0; i <= segments; i++) {
+            const t = i / segments;
+            points.push(curve.getPoint(t));
+        }
+        
+        // Create geometry from points
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        
+        // Create pulsing material
+        const material = new THREE.LineBasicMaterial({ 
+            color: 0x9C27B0,
+            linewidth: 3,
+            transparent: true,
+            opacity: 0.8
+        });
+        
+        // Create the beam
+        this.teleportBeam = new THREE.Line(geometry, material);
+        this.scene.add(this.teleportBeam);
+        
+        // Add pulsing animation to the beam
+        this.animateBeam();
+    }
+    
+    // Highlight connected teleport blocks with matching colors
+    highlightConnectedBlocks(sourceBlock, targetBlock) {
+        // Store original materials to restore later
+        if (!sourceBlock.userData.originalMaterial) {
+            sourceBlock.userData.originalMaterial = sourceBlock.material.clone();
+        }
+        if (!targetBlock.userData.originalMaterial) {
+            targetBlock.userData.originalMaterial = targetBlock.material.clone();
+        }
+        
+        // Create matching emissive colors
+        const sourceColor = new THREE.Color(0x9C27B0); // Purple
+        const targetColor = new THREE.Color(0xE040FB); // Lighter purple
+        
+        // Update source block material
+        const sourceMaterial = sourceBlock.material.clone();
+        sourceMaterial.emissive = sourceColor;
+        sourceMaterial.emissiveIntensity = 0.5;
+        sourceBlock.material = sourceMaterial;
+        
+        // Update target block material
+        const targetMaterial = targetBlock.material.clone();
+        targetMaterial.emissive = targetColor;
+        targetMaterial.emissiveIntensity = 0.8;
+        targetBlock.material = targetMaterial;
+        
+        // Create arrow pointing to target
+        this.createDirectionIndicator(sourceBlock, targetBlock);
+    }
+    
+    // Create a directional indicator showing teleport destination
+    createDirectionIndicator(sourceBlock, targetBlock) {
+        // Remove existing indicator if any
+        if (sourceBlock.userData.directionIndicator) {
+            this.scene.remove(sourceBlock.userData.directionIndicator);
+        }
+        
+        // Calculate direction vector
+        const direction = new THREE.Vector3().subVectors(
+            targetBlock.position, 
+            sourceBlock.position
+        ).normalize();
+        
+        // Create arrow geometry pointing toward the target
+        const arrowLength = 0.5;
+        const arrowPosition = sourceBlock.position.clone();
+        arrowPosition.y += 1.0; // Raise above the block
+        
+        // Create arrow shape (pointing up by default)
+        const arrowGeometry = new THREE.ConeGeometry(0.2, arrowLength, 8);
+        const arrowMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0xE040FB,
+            transparent: true,
+            opacity: 0.8
+        });
+        
+        const arrow = new THREE.Mesh(arrowGeometry, arrowMaterial);
+        arrow.position.copy(arrowPosition);
+        
+        // Rotate arrow to point in the right direction
+        // First, calculate the rotation to apply to the arrow
+        const upVector = new THREE.Vector3(0, 1, 0);
+        const rotationAxis = new THREE.Vector3().crossVectors(upVector, direction).normalize();
+        const angle = Math.acos(upVector.dot(direction));
+        
+        // If vectors are nearly parallel, no rotation is needed
+        if (rotationAxis.length() > 0.001) {
+            arrow.quaternion.setFromAxisAngle(rotationAxis, angle);
+        }
+        
+        // Store the arrow in the source block's userData
+        sourceBlock.userData.directionIndicator = arrow;
+        
+        // Add to scene
+        this.scene.add(arrow);
+        
+        // Animate the arrow
+        this.animateArrow(arrow);
+    }
+    
+    // Animate the direction indicator arrow
+    animateArrow(arrow) {
+        const startY = arrow.position.y;
+        let animationFrame = 0;
+        
+        const arrowInterval = setInterval(() => {
+            if (!arrow.parent) {
+                clearInterval(arrowInterval);
+                return;
+            }
+            
+            // Bob up and down
+            animationFrame += 0.1;
+            arrow.position.y = startY + Math.sin(animationFrame) * 0.1;
+            
+            // Pulse opacity
+            arrow.material.opacity = 0.5 + Math.sin(animationFrame) * 0.3;
+        }, 50);
+    }
+    
+    // Animate the teleport beam
+    animateBeam() {
+        if (!this.teleportBeam) return;
+        
+        let pulseDirection = 1;
+        let pulseValue = 0.8;
+        
+        const pulseInterval = setInterval(() => {
+            if (!this.teleportBeam || !this.teleportBeam.parent) {
+                clearInterval(pulseInterval);
+                return;
+            }
+            
+            // Update opacity to create pulsing effect
+            pulseValue += 0.05 * pulseDirection;
+            if (pulseValue >= 1) {
+                pulseValue = 1;
+                pulseDirection = -1;
+            } else if (pulseValue <= 0.5) {
+                pulseValue = 0.5;
+                pulseDirection = 1;
+            }
+            
+            this.teleportBeam.material.opacity = pulseValue;
+        }, 50);
+    }
+    
+    // Remove the teleport beam and reset block materials
+    removeBeam() {
+        // Remove beam
+        if (this.teleportBeam && this.teleportBeam.parent) {
+            this.scene.remove(this.teleportBeam);
+            this.teleportBeam = null;
+        }
+        
+        // Reset block materials
+        if (this.currentTeleportBlock) {
+            if (this.currentTeleportBlock.userData.originalMaterial) {
+                this.currentTeleportBlock.material = this.currentTeleportBlock.userData.originalMaterial;
+            }
+            
+            // Remove direction indicator
+            if (this.currentTeleportBlock.userData.directionIndicator) {
+                this.scene.remove(this.currentTeleportBlock.userData.directionIndicator);
+                delete this.currentTeleportBlock.userData.directionIndicator;
+            }
+        }
+        
+        if (this.targetTeleportBlock) {
+            if (this.targetTeleportBlock.userData.originalMaterial) {
+                this.targetTeleportBlock.material = this.targetTeleportBlock.userData.originalMaterial;
+            }
+        }
     }
     
     // Create visual teleport effect
