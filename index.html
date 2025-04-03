@@ -52,6 +52,13 @@
     </div>
     
     <script src="leaderboard.js"></script>
+    <script>
+        function onCourseComplete(course) {
+            const courseId = course.id;   // e.g., 'first-steps'
+            const courseName = course.name; // e.g., 'First Steps'
+            window.leaderboardManager.showLeaderboardOverlay(courseId, courseName);
+        }
+    </script>
     <script src="landing.js"></script>
 </body>
 </html> 
