@@ -28,12 +28,10 @@ class LeaderboardManager {
         this.updateConnectionStatus('connecting');
         
         try {
-            // For the specific obstacles.onrender.com site, ensure we connect to the right websocket endpoint
-            if (window.location.hostname === 'obstacles.onrender.com') {
-                this.socket = new WebSocket(`wss://obstacles.onrender.com`);
-            } else {
-                this.socket = new WebSocket(`${protocol}${host}`);
-            }
+            // Create WebSocket connection
+            this.socket = new WebSocket(`${protocol}${host}`);
+            
+            console.log(`Attempting to connect to: ${protocol}${host}`);
             
             // Setup event handlers
             this.socket.onopen = () => {
