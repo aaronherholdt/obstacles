@@ -136,6 +136,11 @@
     color: #ffa500;
 }
 
+#connection-status.connecting {
+    background-color: rgba(0, 132, 255, 0.2);
+    color: #66b3ff;
+}
+
 /* View Leaderboard button in completion dialog */
 #viewLeaderboardButton {
     background-color: #2196F3;
