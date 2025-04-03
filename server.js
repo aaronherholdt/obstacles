@@ -2,12 +2,21 @@ const http = require('http');
 const WebSocket = require('ws');
 const fs = require('fs');
 const path = require('path');
+const express = require('express');
 
-// Create HTTP server
-const server = http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('WebSocket server for Obstacle Course Challenge');
+// Create Express app
+const app = express();
+
+// Serve static files
+app.use(express.static(__dirname));
+
+// Handle all routes by serving index.html for client-side routing
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
+
+// Create HTTP server using Express app
+const server = http.createServer(app);
 
 // Initialize WebSocket server
 const wss = new WebSocket.Server({ server });
