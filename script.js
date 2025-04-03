@@ -56,6 +56,9 @@ camera.position.set(5, 5, 10); // Start position
 // Initialize game events system for communication between components
 window.gameEvents = new EventTarget();
 
+// Global variable for selected course
+let selectedCourse = null;
+
 // Listen for block destroyed events (for explosion blocks)
 window.gameEvents.addEventListener('blockDestroyed', (event) => {
     const destroyedBlock = event.detail.block;
@@ -1815,6 +1818,96 @@ function showCompletionDialog() {
     timeInfo.style.fontWeight = 'bold';
     timeInfo.style.color = '#FFFF00';
 
+    // Add player name input and submit score elements
+    const courseId = selectedCourse ? selectedCourse.id : 'custom';
+    const courseName = selectedCourse ? selectedCourse.title : 'Custom Course';
+    
+    const leaderboardSection = document.createElement('div');
+    leaderboardSection.style.marginBottom = '20px';
+    leaderboardSection.style.padding = '15px';
+    leaderboardSection.style.backgroundColor = 'rgba(0, 0, 0, 0.3)';
+    leaderboardSection.style.borderRadius = '8px';
+    
+    const leaderboardTitle = document.createElement('h3');
+    leaderboardTitle.textContent = 'Submit Your Score';
+    leaderboardTitle.style.margin = '0 0 10px 0';
+    leaderboardTitle.style.color = '#4CAF50';
+    
+    const nameInput = document.createElement('input');
+    nameInput.id = 'playerNameInput';
+    nameInput.type = 'text';
+    nameInput.placeholder = 'Your Name';
+    nameInput.maxLength = 15;
+    nameInput.value = localStorage.getItem('lastPlayerName') || '';
+    
+    const submitButton = document.createElement('button');
+    submitButton.textContent = 'Submit Score';
+    submitButton.style.backgroundColor = '#4CAF50';
+    submitButton.style.color = 'white';
+    submitButton.style.border = 'none';
+    submitButton.style.borderRadius = '5px';
+    submitButton.style.padding = '10px 20px';
+    submitButton.style.marginTop = '10px';
+    submitButton.style.cursor = 'pointer';
+    submitButton.style.fontWeight = 'bold';
+    
+    // Submit button click handler
+    submitButton.addEventListener('click', () => {
+        const playerName = nameInput.value.trim();
+        if (playerName.length > 0) {
+            // Save player name for future submissions
+            localStorage.setItem('lastPlayerName', playerName);
+            
+            // Submit score to leaderboard
+            if (window.leaderboardManager) {
+                window.leaderboardManager.submitScore(courseId, playerName, elapsedTime);
+                
+                // Replace input and submit with confirmation
+                leaderboardSection.innerHTML = '';
+                const confirmationMsg = document.createElement('p');
+                confirmationMsg.textContent = 'Score submitted! Thank you.';
+                confirmationMsg.style.color = '#4CAF50';
+                confirmationMsg.style.fontWeight = 'bold';
+                leaderboardSection.appendChild(confirmationMsg);
+                
+                // Add view leaderboard button
+                const viewLeaderboardButton = document.createElement('button');
+                viewLeaderboardButton.id = 'viewLeaderboardButton';
+                viewLeaderboardButton.textContent = 'View Leaderboard';
+                viewLeaderboardButton.addEventListener('click', () => {
+                    window.leaderboardManager.showLeaderboardOverlay(courseId, courseName);
+                });
+                leaderboardSection.appendChild(viewLeaderboardButton);
+            }
+        } else {
+            // Visual feedback for empty name
+            nameInput.style.borderColor = 'red';
+            nameInput.style.backgroundColor = 'rgba(255, 0, 0, 0.1)';
+            setTimeout(() => {
+                nameInput.style.borderColor = '';
+                nameInput.style.backgroundColor = '';
+            }, 1000);
+        }
+    });
+    
+    // Add view leaderboard button without submitting
+    const viewOnlyButton = document.createElement('button');
+    viewOnlyButton.id = 'viewLeaderboardButton';
+    viewOnlyButton.textContent = 'View Leaderboard';
+    viewOnlyButton.style.marginLeft = '10px';
+    viewOnlyButton.addEventListener('click', () => {
+        if (window.leaderboardManager) {
+            window.leaderboardManager.showLeaderboardOverlay(courseId, courseName);
+        }
+    });
+    
+    // Assemble the leaderboard section
+    leaderboardSection.appendChild(leaderboardTitle);
+    leaderboardSection.appendChild(nameInput);
+    leaderboardSection.appendChild(document.createElement('br'));
+    leaderboardSection.appendChild(submitButton);
+    leaderboardSection.appendChild(viewOnlyButton);
+
     const buttonContainer = document.createElement('div');
     buttonContainer.style.display = 'flex';
     buttonContainer.style.justifyContent = 'space-between';
@@ -1853,6 +1946,7 @@ function showCompletionDialog() {
     dialog.appendChild(title);
     dialog.appendChild(message);
     dialog.appendChild(timeInfo);
+    dialog.appendChild(leaderboardSection);
     dialog.appendChild(buttonContainer);
     overlay.appendChild(dialog);
     document.body.appendChild(overlay);
@@ -2158,6 +2252,12 @@ function initializeFromSelectedCourse() {
         if (selectedCourseData) {
             try {
                 const courseData = JSON.parse(selectedCourseData);
+                
+                // Set the global selectedCourse variable
+                selectedCourse = {
+                    id: courseData.id || 'custom',
+                    title: courseData.title || 'Custom Course'
+                };
                 
                 // Clear existing course
                 // Remove all placed blocks
@@ -2671,4 +2771,4 @@ function formatTime(milliseconds) {
     const formattedSeconds = String(seconds).padStart(2, '0');
     
     return `${formattedMinutes}:${formattedSeconds}.${deciseconds}`;
-} 
+}
