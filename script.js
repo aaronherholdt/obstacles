@@ -1817,10 +1817,10 @@ function showCompletionDialog() {
     timeInfo.style.fontSize = '1.2rem';
     timeInfo.style.fontWeight = 'bold';
     timeInfo.style.color = '#FFFF00';
-
-    // Add player name input and submit score elements only in play mode
-    const courseId = selectedCourse ? selectedCourse.id : 'custom';
-    const courseName = selectedCourse ? selectedCourse.title : 'Custom Course';
+    
+    // Make sure we have the correct course information
+    const courseId = selectedCourse ? (selectedCourse.id || 'custom') : 'custom';
+    const courseName = selectedCourse ? (selectedCourse.title || 'Custom Course') : 'Custom Course';
     
     // Create leaderboard section only if in play mode
     let leaderboardSection;
@@ -2258,13 +2258,16 @@ function initializeFromSelectedCourse() {
         
         if (selectedCourseData) {
             try {
-                const courseData = JSON.parse(selectedCourseData);
+                const courseObj = JSON.parse(selectedCourseData);
                 
                 // Set the global selectedCourse variable
                 selectedCourse = {
-                    id: courseData.id || 'custom',
-                    title: courseData.title || 'Custom Course'
+                    id: courseObj.id || 'custom',
+                    title: courseObj.title || 'Custom Course'
                 };
+
+                // Get the course data from the new structure
+                const courseData = courseObj.data || courseObj;
                 
                 // Clear existing course
                 // Remove all placed blocks
