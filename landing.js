@@ -1217,7 +1217,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // Play the selected course
     function playCourse(course) {
         // Store the course data in localStorage to be loaded by the game
-        localStorage.setItem('selectedCourse', JSON.stringify(course.data));
+        localStorage.setItem('selectedCourse', JSON.stringify({
+            id: course.id,
+            title: course.title,
+            data: course.data
+        }));
         
         // Navigate to the builder page with a parameter to indicate we want to play
         window.location.href = 'builder.html?mode=play';
