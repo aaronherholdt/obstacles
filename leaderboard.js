@@ -24,13 +24,24 @@ class LeaderboardManager {
         const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
         const host = window.location.hostname === 'localhost' ? 'localhost:3000' : window.location.host;
         
+        // Update UI to show connecting status
+        this.updateConnectionStatus('connecting');
+        
         try {
-            this.socket = new WebSocket(`${protocol}${host}`);
+            // For the specific obstacles.onrender.com site, ensure we connect to the right websocket endpoint
+            if (window.location.hostname === 'obstacles.onrender.com') {
+                this.socket = new WebSocket(`wss://obstacles.onrender.com`);
+            } else {
+                this.socket = new WebSocket(`${protocol}${host}`);
+            }
             
             // Setup event handlers
             this.socket.onopen = () => {
                 console.log('Connected to leaderboard server');
                 this.useLocalStorage = false;
+                
+                // Update UI to show connected status
+                this.updateConnectionStatus('connected');
                 
                 // Request all leaderboards upon connection
                 this.socket.send(JSON.stringify({
@@ -49,11 +60,13 @@ class LeaderboardManager {
             
             this.socket.onerror = (error) => {
                 console.error('WebSocket error:', error);
+                this.updateConnectionStatus('error');
                 this.fallbackToLocalStorage();
             };
             
             this.socket.onclose = (event) => {
                 console.log('Disconnected from leaderboard server:', event.code, event.reason);
+                this.updateConnectionStatus('disconnected');
                 this.fallbackToLocalStorage();
                 
                 // Attempt to reconnect after delay (if not a normal closure)
@@ -338,13 +351,14 @@ class LeaderboardManager {
         title.textContent = courseName ? `Leaderboard: ${courseName}` : 'Leaderboard';
         
         // Update connection status
-        const connectionStatus = document.getElementById('connection-status');
         if (this.useLocalStorage) {
-            connectionStatus.textContent = 'You are currently offline. Leaderboard data is stored locally.';
-            connectionStatus.className = 'offline';
+            this.updateConnectionStatus('offline');
+        } else if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+            this.updateConnectionStatus('connected');
+        } else if (this.socket && this.socket.readyState === WebSocket.CONNECTING) {
+            this.updateConnectionStatus('connecting');
         } else {
-            connectionStatus.textContent = 'Connected to leaderboard server.';
-            connectionStatus.className = 'online';
+            this.updateConnectionStatus('offline');
         }
         
         // Get leaderboard data - always request fresh data from server if connected
@@ -368,6 +382,40 @@ class LeaderboardManager {
                 overlay.style.display = 'none';
             }, 300);
         }
+    }
+    
+    // Update connection status
+    updateConnectionStatus(status) {
+        const connectionStatus = document.getElementById('connection-status');
+        if (!connectionStatus) return;
+        
+        let message = '';
+        let className = '';
+        
+        switch (status) {
+            case 'connected':
+                message = 'Connected to leaderboard server.';
+                className = 'online';
+                break;
+            case 'connecting':
+                message = 'Connecting to leaderboard server...';
+                className = 'connecting';
+                break;
+            case 'error':
+                message = 'Error connecting to leaderboard server. Using local storage.';
+                className = 'offline';
+                break;
+            case 'disconnected':
+                message = 'Disconnected from leaderboard server. Using local storage.';
+                className = 'offline';
+                break;
+            default:
+                message = 'You are currently offline. Leaderboard data is stored locally.';
+                className = 'offline';
+        }
+        
+        connectionStatus.textContent = message;
+        connectionStatus.className = className;
     }
 }
 
