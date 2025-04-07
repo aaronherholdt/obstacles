@@ -26,11 +26,14 @@ class LeaderboardManager {
         try {
             const localData = localStorage.getItem('obstacleLeaderboards');
             if (localData) {
-                // We'll sync this with the server once connected
                 this.localLeaderboardsToSync = JSON.parse(localData);
+                console.log('Local leaderboards found:', this.localLeaderboardsToSync);
+            } else {
+                this.localLeaderboardsToSync = {};
             }
         } catch (error) {
             console.error('Error checking local leaderboards:', error);
+            this.localLeaderboardsToSync = {};
         }
     }
     
@@ -53,23 +56,18 @@ class LeaderboardManager {
             this.socket.onopen = () => {
                 console.log('Connected to leaderboard server');
                 this.useLocalStorage = false;
-                
-                // Update UI to show connected status
                 this.updateConnectionStatus('connected');
-                
-                // Sync any locally stored leaderboards to server
-                if (this.localLeaderboardsToSync) {
-                    console.log('Syncing local leaderboards to server');
-                    this.saveLeaderboardsToServer(this.localLeaderboardsToSync);
-                    this.localLeaderboardsToSync = null;
+
+                // Sync ALL local leaderboards to server, not just unsynced ones
+                const localLeaderboards = this.getLeaderboardsFromLocalStorage();
+                if (Object.keys(localLeaderboards).length > 0) {
+                    console.log('Syncing all local leaderboards to server:', localLeaderboards);
+                    this.saveLeaderboardsToServer(localLeaderboards);
+                    // Optionally clear local storage after successful sync if server is authoritative
+                    // localStorage.removeItem('obstacleLeaderboards');
                 }
-                
-                // Request all leaderboards upon connection
-                this.socket.send(JSON.stringify({
-                    type: 'getLeaderboards'
-                }));
-                
-                // If we have a current course ID, request its leaderboard
+
+                this.socket.send(JSON.stringify({ type: 'getLeaderboards' }));
                 if (this.currentCourseId) {
                     this.getLeaderboard(this.currentCourseId);
                 }
