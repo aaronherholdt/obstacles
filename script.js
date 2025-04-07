@@ -1881,6 +1881,11 @@ function showCompletionDialog() {
                         window.leaderboardManager.showLeaderboardOverlay(courseId, courseName);
                     });
                     leaderboardSection.appendChild(viewLeaderboardButton);
+                    
+                    // Automatically show the leaderboard after a short delay
+                    setTimeout(() => {
+                        window.leaderboardManager.showLeaderboardOverlay(courseId, courseName);
+                    }, 500);
                 }
             } else {
                 // Visual feedback for empty name
