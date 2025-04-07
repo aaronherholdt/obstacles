@@ -161,10 +161,6 @@ class LeaderboardManager {
         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
             this.socket.send(JSON.stringify(scoreData));
             
-            // For immediate feedback, also update locally and show UI
-            // (server will eventually broadcast the updated data)
-            this.submitScoreLocally(courseId, playerName, time);
-            
             // Request updated leaderboard from server
             setTimeout(() => {
                 this.getLeaderboard(courseId);
