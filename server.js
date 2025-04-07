@@ -31,14 +31,38 @@ const leaderboardsPath = path.join(__dirname, 'leaderboards.json');
 try {
     if (fs.existsSync(leaderboardsPath)) {
         const data = fs.readFileSync(leaderboardsPath, 'utf8');
-        leaderboards = JSON.parse(data);
-        console.log('Leaderboards loaded from file');
+        try {
+            leaderboards = JSON.parse(data);
+            console.log('Leaderboards loaded from file');
+            
+            // Validate the loaded data structure
+            if (typeof leaderboards !== 'object') {
+                console.error('Invalid leaderboards data format, resetting to empty object');
+                leaderboards = {};
+            }
+            
+            // Create backup of current leaderboards file
+            const backupPath = `${leaderboardsPath}.backup`;
+            fs.writeFileSync(backupPath, data, 'utf8');
+            console.log('Created backup of leaderboards file');
+        } catch (parseError) {
+            console.error('Error parsing leaderboards JSON:', parseError);
+            console.log('Using empty leaderboards and backing up corrupted file');
+            
+            // Backup the corrupted file
+            const corruptedPath = `${leaderboardsPath}.corrupted`;
+            fs.writeFileSync(corruptedPath, data, 'utf8');
+            
+            // Reset to empty leaderboards
+            leaderboards = {};
+        }
     } else {
         console.log('No existing leaderboards found. Starting with empty leaderboards.');
         saveLeaderboards(); // Create the initial empty file
     }
 } catch (error) {
     console.error('Error loading leaderboards:', error);
+    leaderboards = {};
 }
 
 // Save leaderboards to file
@@ -78,6 +102,10 @@ wss.on('connection', (ws) => {
                 
                 case 'getLeaderboards':
                     sendAllLeaderboards(ws);
+                    break;
+                    
+                case 'saveLeaderboards':
+                    handleSaveLeaderboards(data.data);
                     break;
                     
                 default:
@@ -162,8 +190,60 @@ function sendAllLeaderboards(ws) {
     }));
 }
 
+// Handle saving leaderboards from client
+function handleSaveLeaderboards(newLeaderboards) {
+    if (!newLeaderboards || typeof newLeaderboards !== 'object') {
+        console.error('Invalid leaderboards data received');
+        return;
+    }
+    
+    // Merge the new leaderboards with existing ones
+    // (keeping existing entries if they're not in the new data)
+    for (const courseId in newLeaderboards) {
+        if (!leaderboards[courseId]) {
+            leaderboards[courseId] = [];
+        }
+        
+        // Add new entries
+        newLeaderboards[courseId].forEach(newEntry => {
+            // Check if entry already exists to avoid duplicates
+            const exists = leaderboards[courseId].some(existingEntry => 
+                existingEntry.playerName === newEntry.playerName && 
+                existingEntry.time === newEntry.time && 
+                existingEntry.date === newEntry.date
+            );
+            
+            if (!exists) {
+                leaderboards[courseId].push(newEntry);
+            }
+        });
+        
+        // Sort and limit entries
+        leaderboards[courseId].sort((a, b) => a.time - b.time);
+        if (leaderboards[courseId].length > 10) {
+            leaderboards[courseId] = leaderboards[courseId].slice(0, 10);
+        }
+    }
+    
+    // Save updated leaderboards to file
+    saveLeaderboards();
+    
+    // Broadcast updated leaderboards to all clients
+    wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+            sendAllLeaderboards(client);
+        }
+    });
+}
+
 // Start server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`WebSocket server running on port ${PORT}`);
-}); 
+});
+
+// Set up interval to auto-save leaderboards every 5 minutes
+setInterval(() => {
+    console.log('Auto-saving leaderboards...');
+    saveLeaderboards();
+}, 5 * 60 * 1000); // 5 minutes in milliseconds 
