@@ -2665,10 +2665,8 @@ function createTimerDisplay() {
     // Get the timer container
     const timerContainer = document.getElementById('timer-container');
     
-    // Remove existing timer if any
-    if (timerDisplay) {
-        timerDisplay.remove();
-    }
+    // Clear all existing content from the timer container
+    timerContainer.innerHTML = '';
     
     // Create timer display element
     timerDisplay = document.createElement('div');
