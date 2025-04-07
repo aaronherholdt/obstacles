@@ -33,7 +33,7 @@ try {
         const data = fs.readFileSync(leaderboardsPath, 'utf8');
         try {
             leaderboards = JSON.parse(data);
-            console.log('Leaderboards loaded from file');
+            console.log('Leaderboards loaded from file:', JSON.stringify(leaderboards, null, 2));
             
             // Validate the loaded data structure
             if (typeof leaderboards !== 'object') {
@@ -58,6 +58,7 @@ try {
         }
     } else {
         console.log('No existing leaderboards found. Starting with empty leaderboards.');
+        leaderboards = {}; // Explicitly set to empty object
         saveLeaderboards(); // Create the initial empty file
     }
 } catch (error) {
@@ -69,7 +70,7 @@ try {
 function saveLeaderboards() {
     try {
         fs.writeFileSync(leaderboardsPath, JSON.stringify(leaderboards, null, 2), 'utf8');
-        console.log('Leaderboards saved to file');
+        console.log('Leaderboards saved to file:', JSON.stringify(leaderboards, null, 2));
     } catch (error) {
         console.error('Error saving leaderboards:', error);
     }
