@@ -14,8 +14,24 @@ class LeaderboardManager {
         // Current course ID
         this.currentCourseId = null;
         
+        // Check for locally stored leaderboards to ensure they get synced to server
+        this.checkLocalLeaderboards();
+        
         // Connect to WebSocket server
         this.connect();
+    }
+    
+    // Check local storage for any unsynced leaderboards data
+    checkLocalLeaderboards() {
+        try {
+            const localData = localStorage.getItem('obstacleLeaderboards');
+            if (localData) {
+                // We'll sync this with the server once connected
+                this.localLeaderboardsToSync = JSON.parse(localData);
+            }
+        } catch (error) {
+            console.error('Error checking local leaderboards:', error);
+        }
     }
     
     // Connect to WebSocket server
@@ -40,6 +56,13 @@ class LeaderboardManager {
                 
                 // Update UI to show connected status
                 this.updateConnectionStatus('connected');
+                
+                // Sync any locally stored leaderboards to server
+                if (this.localLeaderboardsToSync) {
+                    console.log('Syncing local leaderboards to server');
+                    this.saveLeaderboardsToServer(this.localLeaderboardsToSync);
+                    this.localLeaderboardsToSync = null;
+                }
                 
                 // Request all leaderboards upon connection
                 this.socket.send(JSON.stringify({
@@ -182,6 +205,9 @@ class LeaderboardManager {
         // Save updated leaderboards
         this.updateLocalStorage(leaderboards);
         
+        // Also ensure the data is saved to the server for persistence
+        this.saveLeaderboardsToServer(leaderboards);
+        
         // Update UI
         this.updateLeaderboardUI(leaderboards[courseId]);
     }
@@ -232,6 +258,16 @@ class LeaderboardManager {
         if (this.currentCourseId) {
             const leaderboards = this.getLeaderboardsFromLocalStorage();
             this.updateLeaderboardUI(leaderboards[this.currentCourseId] || []);
+        }
+    }
+    
+    // Save leaderboard data to server (persist to file system)
+    saveLeaderboardsToServer(leaderboards) {
+        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+            this.socket.send(JSON.stringify({
+                type: 'saveLeaderboards',
+                data: leaderboards
+            }));
         }
     }
     
