@@ -1967,6 +1967,9 @@ function restartLevel() {
     // Disable character movement until start button is pressed again
     canCharacterMove = false;
     
+    // Reset the completion flag
+    hasCompleted = false;
+    
     // Reset the character to start position
     if (character && character.startPosition) {
         const respawnEffect = createRespawnEffect(character.mesh.position, () => {
