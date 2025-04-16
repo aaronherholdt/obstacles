@@ -21,20 +21,13 @@ const server = http.createServer(app);
 // Initialize WebSocket server
 const wss = new WebSocket.Server({ server });
 
-// Store leaderboards in memory
+// Store data in memory
 let leaderboards = {};
+let communityCourses = [];
 
-// Store community courses in memory
-let communityCourses = {
-    courses: [],
-    nextId: 1000
-};
-
-// Path for storing leaderboard data
+// Paths for storing data
 const leaderboardsPath = path.join(__dirname, 'leaderboards.json');
-
-// Path for storing community courses data
-const communityCoursesPath = path.join(__dirname, 'community-courses-index.json');
+const communityCoursesPath = path.join(__dirname, 'community-courses.json');
 
 // Load existing leaderboard data if available
 try {
@@ -81,44 +74,44 @@ try {
         const data = fs.readFileSync(communityCoursesPath, 'utf8');
         try {
             communityCourses = JSON.parse(data);
-            console.log('Community courses loaded from file:', JSON.stringify(communityCourses, null, 2));
+            console.log('Community courses loaded from file:', communityCourses.length);
             
             // Validate the loaded data structure
-            if (!communityCourses.courses || !Array.isArray(communityCourses.courses)) {
+            if (!Array.isArray(communityCourses)) {
                 console.error('Invalid community courses data format, resetting to empty array');
-                communityCourses = { courses: [], nextId: 1000 };
+                communityCourses = [];
             }
             
-            // Create backup of current community courses file
+            // Create backup of current courses file
             const backupPath = `${communityCoursesPath}.backup`;
             fs.writeFileSync(backupPath, data, 'utf8');
             console.log('Created backup of community courses file');
         } catch (parseError) {
             console.error('Error parsing community courses JSON:', parseError);
-            console.log('Using empty community courses and backing up corrupted file');
+            console.log('Using empty courses list and backing up corrupted file');
             
             // Backup the corrupted file
             const corruptedPath = `${communityCoursesPath}.corrupted`;
             fs.writeFileSync(corruptedPath, data, 'utf8');
             
-            // Reset to empty community courses
-            communityCourses = { courses: [], nextId: 1000 };
+            // Reset to empty courses list
+            communityCourses = [];
         }
     } else {
-        console.log('No existing community courses found. Starting with empty courses.');
-        communityCourses = { courses: [], nextId: 1000 }; 
+        console.log('No existing community courses found. Starting with empty list.');
+        communityCourses = []; // Explicitly set to empty array
         saveCommunityCourses(); // Create the initial empty file
     }
 } catch (error) {
     console.error('Error loading community courses:', error);
-    communityCourses = { courses: [], nextId: 1000 };
+    communityCourses = [];
 }
 
 // Save leaderboards to file
 function saveLeaderboards() {
     try {
         fs.writeFileSync(leaderboardsPath, JSON.stringify(leaderboards, null, 2), 'utf8');
-        console.log('Leaderboards saved to file:', JSON.stringify(leaderboards, null, 2));
+        console.log('Leaderboards saved to file');
     } catch (error) {
         console.error('Error saving leaderboards:', error);
     }
@@ -128,7 +121,7 @@ function saveLeaderboards() {
 function saveCommunityCourses() {
     try {
         fs.writeFileSync(communityCoursesPath, JSON.stringify(communityCourses, null, 2), 'utf8');
-        console.log('Community courses saved to file');
+        console.log('Community courses saved to file:', communityCourses.length);
     } catch (error) {
         console.error('Error saving community courses:', error);
     }
@@ -147,14 +140,14 @@ wss.on('connection', (ws) => {
     // Send the current community courses to the new client
     ws.send(JSON.stringify({
         type: 'communityCourses',
-        data: communityCourses.courses
+        data: communityCourses
     }));
     
     // Handle messages from clients
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
-            console.log('Received:', data);
+            console.log('Received:', data.type);
             
             switch (data.type) {
                 case 'submitScore':
@@ -182,7 +175,7 @@ wss.on('connection', (ws) => {
                     break;
                 
                 case 'updateCourseStats':
-                    updateCourseStats(data.courseId, data.incrementPlays, data.incrementLikes);
+                    handleUpdateCourseStats(data.courseId, data.incrementPlays, data.incrementLikes);
                     break;
                     
                 default:
@@ -233,63 +226,6 @@ function handleScoreSubmission(courseId, playerName, time, date) {
     broadcastLeaderboard(courseId);
 }
 
-// Handle course publishing
-function handlePublishCourse(course) {
-    if (!course) {
-        console.error('Invalid course data');
-        return;
-    }
-    
-    // Check if course already exists (update it) or is new (add it)
-    const existingIndex = communityCourses.courses.findIndex(c => String(c.id) === String(course.id));
-    
-    if (existingIndex >= 0) {
-        // Update existing course
-        communityCourses.courses[existingIndex] = course;
-    } else {
-        // Assign a new ID if not provided
-        if (!course.id) {
-            course.id = communityCourses.nextId++;
-        }
-        
-        // Ensure created timestamp
-        if (!course.created) {
-            course.created = new Date().toISOString();
-        }
-        if (!course.dateCreated) {
-            course.dateCreated = course.created;
-        }
-        
-        // Add new course
-        communityCourses.courses.push(course);
-    }
-    
-    // Save and broadcast update
-    saveCommunityCourses();
-    broadcastCommunityCourses();
-}
-
-// Update course statistics (plays and likes)
-function updateCourseStats(courseId, incrementPlays = false, incrementLikes = false) {
-    const courseIndex = communityCourses.courses.findIndex(c => String(c.id) === String(courseId));
-    
-    if (courseIndex >= 0) {
-        if (incrementPlays) {
-            communityCourses.courses[courseIndex].plays = 
-                (communityCourses.courses[courseIndex].plays || 0) + 1;
-        }
-        
-        if (incrementLikes) {
-            communityCourses.courses[courseIndex].likes = 
-                (communityCourses.courses[courseIndex].likes || 0) + 1;
-        }
-        
-        // Save and broadcast update
-        saveCommunityCourses();
-        broadcastCommunityCourses();
-    }
-}
-
 // Send leaderboard for a specific course to a client
 function sendLeaderboard(ws, courseId) {
     const leaderboardData = leaderboards[courseId] || [];
@@ -298,14 +234,6 @@ function sendLeaderboard(ws, courseId) {
         type: 'leaderboard',
         courseId: courseId,
         data: leaderboardData
-    }));
-}
-
-// Send all community courses to a client
-function sendCommunityCourses(ws) {
-    ws.send(JSON.stringify({
-        type: 'communityCourses',
-        data: communityCourses.courses
     }));
 }
 
@@ -319,18 +247,6 @@ function broadcastLeaderboard(courseId) {
                 type: 'leaderboard',
                 courseId: courseId,
                 data: leaderboardData
-            }));
-        }
-    });
-}
-
-// Broadcast community courses update to all connected clients
-function broadcastCommunityCourses() {
-    wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({
-                type: 'communityCourses',
-                data: communityCourses.courses
             }));
         }
     });
@@ -388,6 +304,97 @@ function handleSaveLeaderboards(newLeaderboards) {
             sendAllLeaderboards(client);
         }
     });
+}
+
+// Handle publishing a course
+function handlePublishCourse(course) {
+    if (!course || !course.title || !course.author || !course.data) {
+        console.error('Invalid course data received');
+        return;
+    }
+    
+    // Assign a unique ID if not present
+    if (!course.id) {
+        course.id = Date.now();
+    }
+    
+    // Ensure created date is set
+    if (!course.created) {
+        course.created = new Date().toISOString();
+    }
+    if (!course.dateCreated) {
+        course.dateCreated = course.created;
+    }
+    
+    // Initialize plays and likes if not present
+    if (typeof course.plays !== 'number') {
+        course.plays = 0;
+    }
+    if (typeof course.likes !== 'number') {
+        course.likes = 0;
+    }
+    
+    // Check if course already exists (update if it does)
+    const existingIndex = communityCourses.findIndex(c => c.id === course.id);
+    if (existingIndex >= 0) {
+        communityCourses[existingIndex] = course;
+    } else {
+        // Add new course
+        communityCourses.push(course);
+    }
+    
+    // Save courses to file
+    saveCommunityCourses();
+    
+    // Broadcast updated courses to all clients
+    broadcastCommunityCourses();
+}
+
+// Send all community courses to a client
+function sendCommunityCourses(ws) {
+    ws.send(JSON.stringify({
+        type: 'communityCourses',
+        data: communityCourses
+    }));
+}
+
+// Broadcast updated community courses to all connected clients
+function broadcastCommunityCourses() {
+    wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+            sendCommunityCourses(client);
+        }
+    });
+}
+
+// Handle updating course statistics (plays and likes)
+function handleUpdateCourseStats(courseId, incrementPlays = false, incrementLikes = false) {
+    if (!courseId) {
+        console.error('Invalid course ID for stats update');
+        return;
+    }
+    
+    // Find the course
+    const courseIndex = communityCourses.findIndex(c => c.id == courseId);
+    if (courseIndex === -1) {
+        console.error('Course not found for stats update:', courseId);
+        return;
+    }
+    
+    // Update stats
+    if (incrementPlays) {
+        communityCourses[courseIndex].plays = (communityCourses[courseIndex].plays || 0) + 1;
+    }
+    
+    if (incrementLikes) {
+        communityCourses[courseIndex].likes = (communityCourses[courseIndex].likes || 0) + 1;
+    }
+    
+    // Save courses to file
+    saveCommunityCourses();
+    
+    // Broadcast updated courses
+    broadcastCommunityCourses();
 }
 
 // Start server
