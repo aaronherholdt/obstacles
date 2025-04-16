@@ -4,6 +4,94 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { MOUSE } from 'three'; // Import MOUSE enum
 import { Character } from './character.js'; // Import Character class
 
+// WebSocket connection
+window.ws = null;
+
+// Function to connect to WebSocket
+function connectToWebSocket(onSuccess, onError) {
+    // Close existing connection if any
+    if (window.ws) {
+        try {
+            window.ws.close();
+        } catch (e) {
+            console.error('Error closing existing WebSocket connection:', e);
+        }
+        window.ws = null;
+    }
+
+    // Connect to the server
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.hostname;
+    const port = window.location.port || (protocol === 'wss:' ? '443' : '80');
+    const wsUrl = `${protocol}//${host}:${port}`;
+    
+    try {
+        window.ws = new WebSocket(wsUrl);
+        
+        // Set up event handlers
+        window.ws.onopen = function() {
+            console.log('WebSocket connection established');
+            if (onSuccess) onSuccess();
+        };
+        
+        window.ws.onclose = function() {
+            console.log('WebSocket connection closed');
+            window.ws = null;
+        };
+        
+        window.ws.onerror = function(error) {
+            console.error('WebSocket error:', error);
+            if (onError) onError(error);
+            window.ws = null;
+        };
+        
+        window.ws.onmessage = function(event) {
+            try {
+                const message = JSON.parse(event.data);
+                console.log('WebSocket message received:', message.type);
+                
+                switch (message.type) {
+                    case 'leaderboard':
+                        // Handle leaderboard updates
+                        if (window.leaderboardManager) {
+                            window.leaderboardManager.updateLeaderboard(message.courseId, message.data);
+                        }
+                        break;
+                        
+                    case 'leaderboards':
+                        // Handle all leaderboards
+                        if (window.leaderboardManager) {
+                            window.leaderboardManager.updateAllLeaderboards(message.data);
+                        }
+                        break;
+                        
+                    case 'communityCourses':
+                        // Handle community courses updates
+                        localStorage.setItem('communityCourses', JSON.stringify(message.data));
+                        // Dispatch event to notify any listeners
+                        window.dispatchEvent(new CustomEvent('communityCoursesUpdated', {
+                            detail: { courses: message.data }
+                        }));
+                        break;
+                        
+                    default:
+                        console.log('Unknown message type:', message.type);
+                }
+            } catch (error) {
+                console.error('Error handling WebSocket message:', error);
+            }
+        };
+    } catch (error) {
+        console.error('Error creating WebSocket connection:', error);
+        if (onError) onError(error);
+    }
+}
+
+// Try to connect when the page loads
+document.addEventListener('DOMContentLoaded', function() {
+    connectToWebSocket();
+});
+
 // Variables for timer functionality
 let timerStartTime = 0;
 let timerInterval = null;
@@ -388,130 +476,163 @@ placeButton.addEventListener('click', () => {
 
 // Function to show publish dialog
 function showPublishDialog() {
-    // Show the publish dialog
-    const publishDialog = document.getElementById('publish-dialog');
     publishDialog.classList.add('active');
     
-    // Set up the form
-    const publishForm = document.getElementById('publish-form');
-    const courseNameInput = document.getElementById('course-name');
-    const courseDescriptionInput = document.getElementById('course-description');
-    const difficultySelect = document.getElementById('course-difficulty');
+    // Ensure any clicks on the dialog don't propagate
+    publishDialog.addEventListener('click', (event) => {
+        event.stopPropagation();
+    }, { once: false });
+}
+
+// Add event listeners for publish dialog
+if (publishButton && publishDialog && publishForm && cancelPublishBtn) {
+    publishButton.addEventListener('click', showPublishDialog);
     
-    // Pre-fill with current values if available
-    if (courseMetadata.name) {
-        courseNameInput.value = courseMetadata.name;
-    }
-    if (courseMetadata.description) {
-        courseDescriptionInput.value = courseMetadata.description;
-    }
-    if (courseMetadata.difficulty) {
-        difficultySelect.value = courseMetadata.difficulty;
-    }
-    
-    // Set up cancel button
-    const cancelButton = document.getElementById('cancel-publish');
-    cancelButton.addEventListener('click', () => {
+    // Cancel button closes the dialog
+    cancelPublishBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
         publishDialog.classList.remove('active');
     });
     
-    // Handle form submission
+    // Prevent form submission and handle publishing
     publishForm.addEventListener('submit', (event) => {
         event.preventDefault();
+        event.stopPropagation();
         
         // Get form values
-        const courseName = courseNameInput.value.trim();
-        const courseDescription = courseDescriptionInput.value.trim();
-        const difficulty = difficultySelect.value;
+        const title = document.getElementById('course-title').value;
+        const author = document.getElementById('course-author').value;
+        const difficulty = document.getElementById('course-difficulty').value;
+        const description = document.getElementById('course-description').value || '';
         
-        // Validate
-        if (!courseName) {
-            document.getElementById('publish-status').textContent = 'Please enter a course name';
+        // Create the course data object
+        const courseData = {
+            blocks: [],
+            startMarker: null,
+            finishMarker: null
+        };
+
+        // Serialize blocks
+        placedBlocks.forEach(block => {
+            // Ensure we only save actual blocks, not markers that might be temporarily in the array
+            if (block.userData.type !== 'start' && block.userData.type !== 'finish') {
+                courseData.blocks.push({
+                    x: block.position.x,
+                    y: block.position.y,
+                    z: block.position.z,
+                    type: block.userData.type || 'regular' // Ensure type is saved
+                });
+            }
+        });
+
+        // Serialize start marker
+        if (startMarker) {
+            courseData.startMarker = {
+                x: startMarker.position.x,
+                y: startMarker.position.y,
+                z: startMarker.position.z
+            };
+        } else {
+            // Show error message if start marker is missing
+            document.getElementById('publish-status').textContent = 'Error: Course must have a start marker!';
+            document.getElementById('publish-status').style.color = 'red';
+            return;
+        }
+
+        // Serialize finish marker
+        if (finishMarker) {
+            courseData.finishMarker = {
+                x: finishMarker.position.x,
+                y: finishMarker.position.y,
+                z: finishMarker.position.z
+            };
+        } else {
+            // Show error message if finish marker is missing
+            document.getElementById('publish-status').textContent = 'Error: Course must have a finish marker!';
             document.getElementById('publish-status').style.color = 'red';
             return;
         }
         
-        // Update course metadata
-        courseMetadata.name = courseName;
-        courseMetadata.description = courseDescription;
-        courseMetadata.difficulty = difficulty;
-        
-        // Save the course data (in case it wasn't saved yet)
-        saveCourse();
-        
-        // Generate a JSON object to represent the published course
-        const courseData = getCurrentCourseData();
-        
-        // Generate a thumbnail (in a real game, this would capture an actual image)
-        // For our prototype, we'll just pick one of 8 pre-defined classes
-        const thumbnailIndex = Math.floor(Math.random() * 8) + 1;
-        
-        // Create a course object for publishing
+        // Create full course object with metadata
         const course = {
-            id: courseMetadata.id || Date.now(), // Use existing ID or generate new one
-            title: courseName,
-            description: courseDescription,
-            difficulty: difficulty, 
-            author: "Player", // In a real game, this would be the player's username
-            thumbnailClass: `course-thumbnail-${thumbnailIndex}`,
-            plays: 0,
-            likes: 0,
-            created: new Date().toISOString(),
+            id: Date.now(), // Use timestamp as temporary ID
+            title: title,
+            author: author,
+            difficulty: difficulty,
+            description: description,
             dateCreated: new Date().toISOString(),
+            created: new Date().toISOString(), // Add created field for compatibility
+            likes: 0,
+            plays: 0,
+            thumbnailClass: 'custom-thumbnail',
             data: courseData
         };
         
-        // Store the ID back in the metadata
-        courseMetadata.id = course.id;
+        // Show status message
+        const statusElem = document.getElementById('publish-status');
+        statusElem.textContent = 'Publishing course...';
+        statusElem.style.color = 'blue';
         
-        // Add to community courses
-        let communityCourses = [];
-        
+        // Save to localStorage as fallback
         try {
+            // Get existing courses
+            let communityCourses = [];
             const savedCourses = localStorage.getItem('communityCourses');
             if (savedCourses) {
                 communityCourses = JSON.parse(savedCourses);
             }
+            
+            // Add the new course to local storage for offline access
+            communityCourses.push(course);
+            localStorage.setItem('communityCourses', JSON.stringify(communityCourses));
         } catch (error) {
-            console.error("Error loading community courses:", error);
+            console.error("Error saving course to localStorage:", error);
         }
         
-        // Add the new course
-        communityCourses.push(course);
-        
-        // Save back to localStorage
-        try {
-            localStorage.setItem('communityCourses', JSON.stringify(communityCourses));
-            
-            // Try to publish to the server if available
-            if (typeof window.publishCourse === 'function') {
-                window.publishCourse(course);
-            } else {
-                // If WebSocket is available directly
-                const websocket = window.websocket;
-                if (websocket && websocket.readyState === WebSocket.OPEN) {
-                    websocket.send(JSON.stringify({
-                        type: 'publishCourse',
-                        course: course
-                    }));
-                    console.log('Published course to server:', course.id);
-                } else {
-                    console.log('WebSocket not available, course saved locally only');
-                }
-            }
+        // Check for WebSocket connection
+        if (window.ws && window.ws.readyState === WebSocket.OPEN) {
+            // Send course to server via WebSocket
+            window.ws.send(JSON.stringify({
+                type: 'publishCourse',
+                course: course
+            }));
             
             // Show success message
-            document.getElementById('publish-status').textContent = 'Course published successfully!';
-            document.getElementById('publish-status').style.color = 'green';
+            statusElem.textContent = 'Course published successfully!';
+            statusElem.style.color = 'green';
             
             // Close the dialog after a short delay
             setTimeout(() => {
                 publishDialog.classList.remove('active');
             }, 1500);
-        } catch (error) {
-            console.error("Error saving community courses:", error);
-            document.getElementById('publish-status').textContent = 'Error publishing course: ' + error.message;
-            document.getElementById('publish-status').style.color = 'red';
+        } else {
+            // Attempt to connect to WebSocket server and then send
+            connectToWebSocket(() => {
+                // Send course to server via WebSocket
+                window.ws.send(JSON.stringify({
+                    type: 'publishCourse',
+                    course: course
+                }));
+                
+                // Show success message
+                statusElem.textContent = 'Course published successfully!';
+                statusElem.style.color = 'green';
+                
+                // Close the dialog after a short delay
+                setTimeout(() => {
+                    publishDialog.classList.remove('active');
+                }, 1500);
+            }, () => {
+                // Connection failed, but we saved locally
+                statusElem.textContent = 'Published locally (offline mode)';
+                statusElem.style.color = 'orange';
+                
+                // Close the dialog after a short delay
+                setTimeout(() => {
+                    publishDialog.classList.remove('active');
+                }, 1500);
+            });
         }
     });
 }
