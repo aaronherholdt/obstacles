@@ -24,8 +24,17 @@ const wss = new WebSocket.Server({ server });
 // Store leaderboards in memory
 let leaderboards = {};
 
+// Store community courses in memory
+let communityCourses = {
+    courses: [],
+    nextId: 1000
+};
+
 // Path for storing leaderboard data
 const leaderboardsPath = path.join(__dirname, 'leaderboards.json');
+
+// Path for storing community courses data
+const communityCoursesPath = path.join(__dirname, 'community-courses-index.json');
 
 // Load existing leaderboard data if available
 try {
@@ -66,6 +75,45 @@ try {
     leaderboards = {};
 }
 
+// Load existing community courses data if available
+try {
+    if (fs.existsSync(communityCoursesPath)) {
+        const data = fs.readFileSync(communityCoursesPath, 'utf8');
+        try {
+            communityCourses = JSON.parse(data);
+            console.log('Community courses loaded from file:', JSON.stringify(communityCourses, null, 2));
+            
+            // Validate the loaded data structure
+            if (!communityCourses.courses || !Array.isArray(communityCourses.courses)) {
+                console.error('Invalid community courses data format, resetting to empty array');
+                communityCourses = { courses: [], nextId: 1000 };
+            }
+            
+            // Create backup of current community courses file
+            const backupPath = `${communityCoursesPath}.backup`;
+            fs.writeFileSync(backupPath, data, 'utf8');
+            console.log('Created backup of community courses file');
+        } catch (parseError) {
+            console.error('Error parsing community courses JSON:', parseError);
+            console.log('Using empty community courses and backing up corrupted file');
+            
+            // Backup the corrupted file
+            const corruptedPath = `${communityCoursesPath}.corrupted`;
+            fs.writeFileSync(corruptedPath, data, 'utf8');
+            
+            // Reset to empty community courses
+            communityCourses = { courses: [], nextId: 1000 };
+        }
+    } else {
+        console.log('No existing community courses found. Starting with empty courses.');
+        communityCourses = { courses: [], nextId: 1000 }; 
+        saveCommunityCourses(); // Create the initial empty file
+    }
+} catch (error) {
+    console.error('Error loading community courses:', error);
+    communityCourses = { courses: [], nextId: 1000 };
+}
+
 // Save leaderboards to file
 function saveLeaderboards() {
     try {
@@ -73,6 +121,16 @@ function saveLeaderboards() {
         console.log('Leaderboards saved to file:', JSON.stringify(leaderboards, null, 2));
     } catch (error) {
         console.error('Error saving leaderboards:', error);
+    }
+}
+
+// Save community courses to file
+function saveCommunityCourses() {
+    try {
+        fs.writeFileSync(communityCoursesPath, JSON.stringify(communityCourses, null, 2), 'utf8');
+        console.log('Community courses saved to file');
+    } catch (error) {
+        console.error('Error saving community courses:', error);
     }
 }
 
@@ -84,6 +142,12 @@ wss.on('connection', (ws) => {
     ws.send(JSON.stringify({
         type: 'leaderboards',
         data: leaderboards
+    }));
+    
+    // Send the current community courses to the new client
+    ws.send(JSON.stringify({
+        type: 'communityCourses',
+        data: communityCourses.courses
     }));
     
     // Handle messages from clients
@@ -107,6 +171,18 @@ wss.on('connection', (ws) => {
                     
                 case 'saveLeaderboards':
                     handleSaveLeaderboards(data.data);
+                    break;
+                
+                case 'publishCourse':
+                    handlePublishCourse(data.course);
+                    break;
+                
+                case 'getCommunityCourses':
+                    sendCommunityCourses(ws);
+                    break;
+                
+                case 'updateCourseStats':
+                    updateCourseStats(data.courseId, data.incrementPlays, data.incrementLikes);
                     break;
                     
                 default:
@@ -157,6 +233,63 @@ function handleScoreSubmission(courseId, playerName, time, date) {
     broadcastLeaderboard(courseId);
 }
 
+// Handle course publishing
+function handlePublishCourse(course) {
+    if (!course) {
+        console.error('Invalid course data');
+        return;
+    }
+    
+    // Check if course already exists (update it) or is new (add it)
+    const existingIndex = communityCourses.courses.findIndex(c => String(c.id) === String(course.id));
+    
+    if (existingIndex >= 0) {
+        // Update existing course
+        communityCourses.courses[existingIndex] = course;
+    } else {
+        // Assign a new ID if not provided
+        if (!course.id) {
+            course.id = communityCourses.nextId++;
+        }
+        
+        // Ensure created timestamp
+        if (!course.created) {
+            course.created = new Date().toISOString();
+        }
+        if (!course.dateCreated) {
+            course.dateCreated = course.created;
+        }
+        
+        // Add new course
+        communityCourses.courses.push(course);
+    }
+    
+    // Save and broadcast update
+    saveCommunityCourses();
+    broadcastCommunityCourses();
+}
+
+// Update course statistics (plays and likes)
+function updateCourseStats(courseId, incrementPlays = false, incrementLikes = false) {
+    const courseIndex = communityCourses.courses.findIndex(c => String(c.id) === String(courseId));
+    
+    if (courseIndex >= 0) {
+        if (incrementPlays) {
+            communityCourses.courses[courseIndex].plays = 
+                (communityCourses.courses[courseIndex].plays || 0) + 1;
+        }
+        
+        if (incrementLikes) {
+            communityCourses.courses[courseIndex].likes = 
+                (communityCourses.courses[courseIndex].likes || 0) + 1;
+        }
+        
+        // Save and broadcast update
+        saveCommunityCourses();
+        broadcastCommunityCourses();
+    }
+}
+
 // Send leaderboard for a specific course to a client
 function sendLeaderboard(ws, courseId) {
     const leaderboardData = leaderboards[courseId] || [];
@@ -165,6 +298,14 @@ function sendLeaderboard(ws, courseId) {
         type: 'leaderboard',
         courseId: courseId,
         data: leaderboardData
+    }));
+}
+
+// Send all community courses to a client
+function sendCommunityCourses(ws) {
+    ws.send(JSON.stringify({
+        type: 'communityCourses',
+        data: communityCourses.courses
     }));
 }
 
@@ -178,6 +319,18 @@ function broadcastLeaderboard(courseId) {
                 type: 'leaderboard',
                 courseId: courseId,
                 data: leaderboardData
+            }));
+        }
+    });
+}
+
+// Broadcast community courses update to all connected clients
+function broadcastCommunityCourses() {
+    wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({
+                type: 'communityCourses',
+                data: communityCourses.courses
             }));
         }
     });
@@ -243,8 +396,9 @@ server.listen(PORT, () => {
     console.log(`WebSocket server running on port ${PORT}`);
 });
 
-// Set up interval to auto-save leaderboards every 5 minutes
+// Set up interval to auto-save data every 5 minutes
 setInterval(() => {
-    console.log('Auto-saving leaderboards...');
+    console.log('Auto-saving data...');
     saveLeaderboards();
+    saveCommunityCourses();
 }, 5 * 60 * 1000); // 5 minutes in milliseconds 
