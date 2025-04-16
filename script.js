@@ -474,6 +474,7 @@ if (publishButton && publishDialog && publishForm && cancelPublishBtn) {
             difficulty: difficulty,
             description: description,
             dateCreated: new Date().toISOString(),
+            created: new Date().toISOString(), // Add created field for compatibility
             likes: 0,
             plays: 0,
             thumbnailClass: 'custom-thumbnail',
