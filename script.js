@@ -3166,7 +3166,24 @@ function updateCourseStats(courseId, incrementPlays = true, incrementLikes = fal
         return; // Not a community course or invalid ID
     }
     
-    // Try to get community courses from localStorage
+    // Update via WebSocket if available
+    if (window.ws && window.ws.readyState === WebSocket.OPEN) {
+        try {
+            window.ws.send(JSON.stringify({
+                type: 'updateCourseStats',
+                courseId: courseId,
+                incrementPlays: incrementPlays,
+                incrementLikes: incrementLikes
+            }));
+            console.log('Sent course stats update via WebSocket');
+            return true;
+        } catch (e) {
+            console.error('Error sending stats update via WebSocket:', e);
+            // Fall back to localStorage
+        }
+    }
+    
+    // Fall back to localStorage if WebSocket is not available
     try {
         const communityCourses = JSON.parse(localStorage.getItem('communityCourses') || '[]');
         
@@ -3187,6 +3204,7 @@ function updateCourseStats(courseId, incrementPlays = true, incrementLikes = fal
         // Save back to localStorage
         localStorage.setItem('communityCourses', JSON.stringify(communityCourses));
         
+        console.log('Updated course stats locally');
         return communityCourses[courseIndex];
     } catch (error) {
         console.error("Error updating course stats:", error);
