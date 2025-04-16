@@ -388,101 +388,85 @@ placeButton.addEventListener('click', () => {
 
 // Function to show publish dialog
 function showPublishDialog() {
+    // Show the publish dialog
+    const publishDialog = document.getElementById('publish-dialog');
     publishDialog.classList.add('active');
     
-    // Ensure any clicks on the dialog don't propagate
-    publishDialog.addEventListener('click', (event) => {
-        event.stopPropagation();
-    }, { once: false });
-}
-
-// Add event listeners for publish dialog
-if (publishButton && publishDialog && publishForm && cancelPublishBtn) {
-    publishButton.addEventListener('click', showPublishDialog);
+    // Set up the form
+    const publishForm = document.getElementById('publish-form');
+    const courseNameInput = document.getElementById('course-name');
+    const courseDescriptionInput = document.getElementById('course-description');
+    const difficultySelect = document.getElementById('course-difficulty');
     
-    // Cancel button closes the dialog
-    cancelPublishBtn.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
+    // Pre-fill with current values if available
+    if (courseMetadata.name) {
+        courseNameInput.value = courseMetadata.name;
+    }
+    if (courseMetadata.description) {
+        courseDescriptionInput.value = courseMetadata.description;
+    }
+    if (courseMetadata.difficulty) {
+        difficultySelect.value = courseMetadata.difficulty;
+    }
+    
+    // Set up cancel button
+    const cancelButton = document.getElementById('cancel-publish');
+    cancelButton.addEventListener('click', () => {
         publishDialog.classList.remove('active');
     });
     
-    // Prevent form submission and handle publishing
+    // Handle form submission
     publishForm.addEventListener('submit', (event) => {
         event.preventDefault();
-        event.stopPropagation();
         
         // Get form values
-        const title = document.getElementById('course-title').value;
-        const author = document.getElementById('course-author').value;
-        const difficulty = document.getElementById('course-difficulty').value;
-        const description = document.getElementById('course-description').value || '';
+        const courseName = courseNameInput.value.trim();
+        const courseDescription = courseDescriptionInput.value.trim();
+        const difficulty = difficultySelect.value;
         
-        // Create the course data object
-        const courseData = {
-            blocks: [],
-            startMarker: null,
-            finishMarker: null
-        };
-
-        // Serialize blocks
-        placedBlocks.forEach(block => {
-            // Ensure we only save actual blocks, not markers that might be temporarily in the array
-            if (block.userData.type !== 'start' && block.userData.type !== 'finish') {
-                courseData.blocks.push({
-                    x: block.position.x,
-                    y: block.position.y,
-                    z: block.position.z,
-                    type: block.userData.type || 'regular' // Ensure type is saved
-                });
-            }
-        });
-
-        // Serialize start marker
-        if (startMarker) {
-            courseData.startMarker = {
-                x: startMarker.position.x,
-                y: startMarker.position.y,
-                z: startMarker.position.z
-            };
-        } else {
-            // Show error message if start marker is missing
-            document.getElementById('publish-status').textContent = 'Error: Course must have a start marker!';
-            document.getElementById('publish-status').style.color = 'red';
-            return;
-        }
-
-        // Serialize finish marker
-        if (finishMarker) {
-            courseData.finishMarker = {
-                x: finishMarker.position.x,
-                y: finishMarker.position.y,
-                z: finishMarker.position.z
-            };
-        } else {
-            // Show error message if finish marker is missing
-            document.getElementById('publish-status').textContent = 'Error: Course must have a finish marker!';
+        // Validate
+        if (!courseName) {
+            document.getElementById('publish-status').textContent = 'Please enter a course name';
             document.getElementById('publish-status').style.color = 'red';
             return;
         }
         
-        // Create full course object with metadata
+        // Update course metadata
+        courseMetadata.name = courseName;
+        courseMetadata.description = courseDescription;
+        courseMetadata.difficulty = difficulty;
+        
+        // Save the course data (in case it wasn't saved yet)
+        saveCourse();
+        
+        // Generate a JSON object to represent the published course
+        const courseData = getCurrentCourseData();
+        
+        // Generate a thumbnail (in a real game, this would capture an actual image)
+        // For our prototype, we'll just pick one of 8 pre-defined classes
+        const thumbnailIndex = Math.floor(Math.random() * 8) + 1;
+        
+        // Create a course object for publishing
         const course = {
-            id: Date.now(), // Use timestamp as temporary ID
-            title: title,
-            author: author,
-            difficulty: difficulty,
-            description: description,
-            dateCreated: new Date().toISOString(),
-            created: new Date().toISOString(), // Add created field for compatibility
-            likes: 0,
+            id: courseMetadata.id || Date.now(), // Use existing ID or generate new one
+            title: courseName,
+            description: courseDescription,
+            difficulty: difficulty, 
+            author: "Player", // In a real game, this would be the player's username
+            thumbnailClass: `course-thumbnail-${thumbnailIndex}`,
             plays: 0,
-            thumbnailClass: 'custom-thumbnail',
+            likes: 0,
+            created: new Date().toISOString(),
+            dateCreated: new Date().toISOString(),
             data: courseData
         };
         
-        // Try to get the community courses from localStorage
+        // Store the ID back in the metadata
+        courseMetadata.id = course.id;
+        
+        // Add to community courses
         let communityCourses = [];
+        
         try {
             const savedCourses = localStorage.getItem('communityCourses');
             if (savedCourses) {
@@ -498,6 +482,23 @@ if (publishButton && publishDialog && publishForm && cancelPublishBtn) {
         // Save back to localStorage
         try {
             localStorage.setItem('communityCourses', JSON.stringify(communityCourses));
+            
+            // Try to publish to the server if available
+            if (typeof window.publishCourse === 'function') {
+                window.publishCourse(course);
+            } else {
+                // If WebSocket is available directly
+                const websocket = window.websocket;
+                if (websocket && websocket.readyState === WebSocket.OPEN) {
+                    websocket.send(JSON.stringify({
+                        type: 'publishCourse',
+                        course: course
+                    }));
+                    console.log('Published course to server:', course.id);
+                } else {
+                    console.log('WebSocket not available, course saved locally only');
+                }
+            }
             
             // Show success message
             document.getElementById('publish-status').textContent = 'Course published successfully!';
