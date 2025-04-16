@@ -319,7 +319,6 @@ canvas {
     transition: opacity 0.3s ease;
 }
 
-/* Mode toggle button styles */
 #modeToggleButton {
     position: absolute;
     bottom: 20px;
