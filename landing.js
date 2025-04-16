@@ -1383,6 +1383,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function init() {
         createAssetsFolder();
         setupCommunityStorage();
+        setupTimestampRefresh();
         
         // Check for any URL parameters
         const urlParams = new URLSearchParams(window.location.search);
@@ -1447,6 +1448,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (storedCourses) {
                     loadedCourses = JSON.parse(storedCourses);
                     console.log('Loaded stored community courses:', loadedCourses.length);
+                    
+                    // Ensure all courses have a valid created/dateCreated field
+                    loadedCourses = loadedCourses.map(course => {
+                        if (!course.created && !course.dateCreated) {
+                            // If neither field exists, set them to current time
+                            course.created = new Date().toISOString();
+                            course.dateCreated = course.created;
+                        } else if (!course.created) {
+                            // If only dateCreated exists, copy it to created
+                            course.created = course.dateCreated;
+                        } else if (!course.dateCreated) {
+                            // If only created exists, copy it to dateCreated
+                            course.dateCreated = course.created;
+                        }
+                        return course;
+                    });
                 }
             } catch (e) {
                 console.error('Error loading community courses from localStorage:', e);
@@ -1474,26 +1491,27 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 500);
     }
     
-    // Generate mock community courses for demonstration
+    // Generate mock community courses (for development/demo purposes)
     function generateMockCommunityCourses() {
         // This function is kept for development purposes but is no longer used
         const mockCourses = [];
-        const difficulties = ['Easy', 'Medium', 'Hard'];
-        const prefixes = ['Adventure', 'Challenge', 'Extreme', 'Ultimate', 'Ninja', 'Master', 'Pro', 'Epic'];
-        const suffixes = ['Parkour', 'Run', 'Jump', 'Race', 'Maze', 'Path', 'Course', 'Journey'];
-        const authors = ['Player1', 'JumpMaster', 'CourseCreator', 'ObstacleKing', 'NinjaRunner', 'SpeedJumper'];
+        const courseCount = 15; // Generate 15 mock courses
         
-        // Generate 20-30 random courses
-        const courseCount = 20 + Math.floor(Math.random() * 10);
+        // Random course elements
+        const prefixes = ['Amazing', 'Challenging', 'Super', 'Ultimate', 'Extreme', 'Basic', 'Simple', 'Hard'];
+        const suffixes = ['Parkour', 'Maze', 'Jump', 'Climb', 'Obstacle Course', 'Adventure', 'Challenge'];
+        const authors = ['SkyBuilder', 'MasterCreator', 'ObstaclePro', 'JumpKing', 'DesignWizard', 'ParkourQueen'];
         
         for (let i = 1; i <= courseCount; i++) {
             const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
             const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
-            const difficulty = difficulties[Math.floor(Math.random() * difficulties.length)];
             const author = authors[Math.floor(Math.random() * authors.length)];
             const plays = Math.floor(Math.random() * 1000);
-            const likes = Math.floor(Math.random() * plays * 0.7);
-            const daysAgo = Math.floor(Math.random() * 30);
+            const likes = Math.floor(Math.random() * plays * 0.7); // Some percentage of plays are likes
+            const difficulty = ['Easy', 'Medium', 'Hard'][Math.floor(Math.random() * 3)];
+            const daysAgo = Math.floor(Math.random() * 60); // Random days ago (0-60)
+            
+            const creationDate = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
             
             mockCourses.push({
                 id: 1000 + i,
@@ -1504,7 +1522,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 thumbnailClass: `course-thumbnail-${1 + Math.floor(Math.random() * 8)}`,
                 plays: plays,
                 likes: likes,
-                created: new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000),
+                created: creationDate.toISOString(), // Store as ISO string for consistency
+                dateCreated: creationDate.toISOString(), // Add dateCreated for compatibility
                 data: {
                     // A simplified representation of course data
                     blocks: Array(50).fill(null).map(() => ({
@@ -1681,17 +1700,9 @@ document.addEventListener('DOMContentLoaded', function() {
         courseDiv.className = 'community-course-item';
         courseDiv.dataset.courseId = course.id;
         
-        // Format date
-        const createdDate = new Date(course.created);
-        const now = new Date();
-        const diffTime = Math.abs(now - createdDate);
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        let dateString = `${diffDays} days ago`;
-        if (diffDays === 0) {
-            dateString = 'Today';
-        } else if (diffDays === 1) {
-            dateString = 'Yesterday';
-        }
+        // Use both created and dateCreated fields for compatibility
+        const dateValue = course.created || course.dateCreated;
+        const dateString = formatTimeAgo(dateValue);
         
         // Create course HTML
         courseDiv.innerHTML = `
@@ -1749,5 +1760,62 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         
         return courseDiv;
+    }
+    
+    // Format time ago for dates
+    function formatTimeAgo(date) {
+        if (!date) return 'Unknown';
+        
+        const now = new Date();
+        const dateObj = new Date(date);
+        
+        // Check if the date is valid
+        if (isNaN(dateObj.getTime())) return 'Invalid date';
+        
+        const seconds = Math.floor((now - dateObj) / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+        const months = Math.floor(days / 30);
+        const years = Math.floor(days / 365);
+        
+        if (seconds < 60) {
+            return seconds === 1 ? '1 second ago' : `${seconds} seconds ago`;
+        } else if (minutes < 60) {
+            return minutes === 1 ? '1 minute ago' : `${minutes} minutes ago`;
+        } else if (hours < 24) {
+            return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
+        } else if (days < 30) {
+            return days === 1 ? '1 day ago' : `${days} days ago`;
+        } else if (months < 12) {
+            return months === 1 ? '1 month ago' : `${months} months ago`;
+        } else {
+            return years === 1 ? '1 year ago' : `${years} years ago`;
+        }
+    }
+    
+    // Update all timestamps in the community grid
+    function updateAllTimestamps() {
+        const timestampElements = document.querySelectorAll('.created-date');
+        timestampElements.forEach(element => {
+            const courseId = element.closest('.community-course-item')?.dataset.courseId;
+            if (courseId) {
+                const course = communityCourses.find(c => String(c.id) === String(courseId));
+                if (course) {
+                    // Use both created and dateCreated fields for compatibility
+                    const dateValue = course.created || course.dateCreated;
+                    element.textContent = formatTimeAgo(dateValue);
+                }
+            }
+        });
+    }
+    
+    // Set up timer to refresh timestamps
+    function setupTimestampRefresh() {
+        // Initial update
+        updateAllTimestamps();
+        
+        // Update every minute
+        setInterval(updateAllTimestamps, 60000);
     }
 }); 
