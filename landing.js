@@ -1452,24 +1452,31 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.error('Error loading community courses from localStorage:', e);
             }
             
-            // If we have stored courses, use them
-            if (loadedCourses.length > 0) {
-                communityCourses = loadedCourses;
-            } else {
-                // Otherwise, fall back to mock data
-                communityCourses = generateMockCommunityCourses();
-            }
+            // Set the community courses from loaded data
+            communityCourses = loadedCourses;
             
             // Update the grid with loaded courses
             updateCommunityGrid();
             
             // Set up filter and sort button listeners
             setupCommunityFilterListeners();
+            
+            // If no courses found, show empty state
+            if (communityCourses.length === 0) {
+                communityGrid.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No courses available yet</h3>
+                        <p>Be the first to create and share a course!</p>
+                        <button class="menu-button" onclick="window.location.href='builder.html'">Create A Course</button>
+                    </div>
+                `;
+            }
         }, 500);
     }
     
     // Generate mock community courses for demonstration
     function generateMockCommunityCourses() {
+        // This function is kept for development purposes but is no longer used
         const mockCourses = [];
         const difficulties = ['Easy', 'Medium', 'Hard'];
         const prefixes = ['Adventure', 'Challenge', 'Extreme', 'Ultimate', 'Ninja', 'Master', 'Pro', 'Epic'];
@@ -1604,13 +1611,55 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // If no courses match filters, show empty state
         if (filteredCourses.length === 0) {
-            communityGrid.innerHTML = `
-                <div class="empty-state">
-                    <h3>No courses found</h3>
-                    <p>Try different search terms or filters</p>
-                    <button class="menu-button refresh-btn" onclick="loadCommunityCourses()">Reset Filters</button>
-                </div>
-            `;
+            if (communityCourses.length === 0) {
+                // No courses available at all
+                communityGrid.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No courses available yet</h3>
+                        <p>Be the first to create and share a course!</p>
+                        <button class="menu-button" onclick="window.location.href='builder.html'">Create A Course</button>
+                    </div>
+                `;
+            } else {
+                // Courses exist, but none match the current filters
+                communityGrid.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No courses found</h3>
+                        <p>Try different search terms or filters</p>
+                        <button class="menu-button refresh-btn">Reset Filters</button>
+                    </div>
+                `;
+                
+                // Add event listener to reset filters button
+                const resetButton = communityGrid.querySelector('.refresh-btn');
+                if (resetButton) {
+                    resetButton.addEventListener('click', function() {
+                        // Reset filters to default
+                        currentFilter = 'all';
+                        currentSort = 'newest';
+                        searchQuery = '';
+                        courseSearch.value = '';
+                        
+                        // Reset active classes on filter/sort buttons
+                        document.querySelectorAll('#community-filters .filter-btn').forEach(btn => {
+                            btn.classList.remove('active');
+                            if (btn.getAttribute('data-filter') === 'all') {
+                                btn.classList.add('active');
+                            }
+                        });
+                        
+                        document.querySelectorAll('.sort-btn').forEach(btn => {
+                            btn.classList.remove('active');
+                            if (btn.getAttribute('data-sort') === 'newest') {
+                                btn.classList.add('active');
+                            }
+                        });
+                        
+                        // Update grid with reset filters
+                        updateCommunityGrid();
+                    });
+                }
+            }
             return;
         }
         
