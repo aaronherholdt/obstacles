@@ -13,6 +13,9 @@ let countdownInterval = null;
 let isCountingDown = false;
 let canCharacterMove = false; // Track whether the character can move
 
+// Add storage for tracking destroyed explosion blocks
+let destroyedExplosionBlocks = [];
+
 // Mobile detection function
 function isMobileOrTablet() {
     const userAgent = navigator.userAgent || navigator.vendor || window.opera;
@@ -62,6 +65,13 @@ let selectedCourse = null;
 // Listen for block destroyed events (for explosion blocks)
 window.gameEvents.addEventListener('blockDestroyed', (event) => {
     const destroyedBlock = event.detail.block;
+    // Store info about the destroyed explosion block for later restoration
+    if (destroyedBlock.userData.type === 'explosion') {
+        destroyedExplosionBlocks.push({
+            position: destroyedBlock.position.clone(),
+            type: 'explosion'
+        });
+    }
     // Remove from placedBlocks array
     const index = placedBlocks.indexOf(destroyedBlock);
     if (index !== -1) {
@@ -1524,6 +1534,9 @@ function togglePlayMode() {
                 // Initialize mobile touch events
                 initMobileTouchControls();
             }
+            
+            // Clear the destroyed explosion blocks array when entering play mode
+            destroyedExplosionBlocks = [];
         } else {
             // Exit play mode - show play button to let user enter play mode
             // Stop the timer when exiting play mode
@@ -1569,6 +1582,20 @@ function togglePlayMode() {
             placedBlocks = placedBlocks.filter(block => 
                 block !== startMarker && block !== finishMarker
             );
+            
+            // Restore any explosion blocks that were destroyed during play mode
+            if (destroyedExplosionBlocks.length > 0) {
+                destroyedExplosionBlocks.forEach(blockData => {
+                    const materialType = materialTypes[blockData.type];
+                    const newCube = new THREE.Mesh(cubeGeometry, materialType.material.clone());
+                    newCube.position.copy(blockData.position);
+                    newCube.userData = { ...materialType.properties }; // Set proper properties
+                    scene.add(newCube);
+                    placedBlocks.push(newCube);
+                });
+                // Clear the array after restoration
+                destroyedExplosionBlocks = [];
+            }
             
             // Remove character
             if (character) {
@@ -1987,10 +2014,18 @@ function showCompletionDialog() {
     // Stop the timer when completing the level
     stopTimer();
     
+    // Check if we're in test mode (not in a predefined course)
+    // startInPlayMode is true for predefined courses, false for test mode
+    if (!startInPlayMode) {
+        // In test mode: just restart the level without showing completion dialog
+        restartLevel();
+        return;
+    }
+    
     // Check if an overlay already exists
     let overlay = document.getElementById('completion-overlay');
     if (overlay) return; // If it exists, don't create another one
-
+    
     // Get the course ID
     const courseId = selectedCourse ? (selectedCourse.id || 'custom') : 'custom';
     
