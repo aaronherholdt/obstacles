@@ -3076,11 +3076,31 @@ function updateCourseStats(courseId, incrementPlays = true, incrementLikes = fal
         // Increment plays if requested
         if (incrementPlays) {
             communityCourses[courseIndex].plays = (communityCourses[courseIndex].plays || 0) + 1;
+            
+            // Send WebSocket message to update plays on server
+            if (window.socket && window.socket.readyState === WebSocket.OPEN) {
+                window.socket.send(JSON.stringify({
+                    type: 'updateCourse',
+                    courseId: parseInt(courseId),
+                    field: 'plays',
+                    value: communityCourses[courseIndex].plays
+                }));
+            }
         }
         
         // Increment likes if requested
         if (incrementLikes) {
             communityCourses[courseIndex].likes = (communityCourses[courseIndex].likes || 0) + 1;
+            
+            // Send WebSocket message to update likes on server
+            if (window.socket && window.socket.readyState === WebSocket.OPEN) {
+                window.socket.send(JSON.stringify({
+                    type: 'updateCourse',
+                    courseId: parseInt(courseId),
+                    field: 'likes',
+                    value: communityCourses[courseIndex].likes
+                }));
+            }
         }
         
         // Save back to localStorage
