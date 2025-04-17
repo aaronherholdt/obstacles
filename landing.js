@@ -1205,42 +1205,8 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     refreshCommunityButton.addEventListener('click', function() {
-        // Show refresh animation for the button
-        refreshCommunityButton.classList.add('rotating');
-        
-        // Show loading indicator in the grid
-        communityGrid.innerHTML = `
-            <div class="loading-indicator">
-                <div class="spinner"></div>
-                <p>Refreshing community courses...</p>
-            </div>
-        `;
-        
-        // Attempt to refresh via WebSocket if available
-        if (window.ws && window.ws.readyState === WebSocket.OPEN) {
-            window.ws.send(JSON.stringify({
-                type: 'getCommunityCourses'
-            }));
-            
-            // Remove rotation class after 1 second
-            setTimeout(() => {
-                refreshCommunityButton.classList.remove('rotating');
-            }, 1000);
-        } else {
-            // Try to reconnect WebSocket
-            initWebSocketConnection();
-            
-            // Fallback to local refresh after a delay if WebSocket doesn't respond
-            setTimeout(() => {
-                // If we haven't gotten a response, just reload from localStorage
-                if (communityGrid.querySelector('.loading-indicator')) {
-                    loadCommunityCourses();
-                }
-                
-                // Remove rotation class
-                refreshCommunityButton.classList.remove('rotating');
-            }, 2000);
-        }
+        // Reload community courses
+        loadCommunityCourses();
     });
     
     searchButton.addEventListener('click', function() {
@@ -1419,9 +1385,6 @@ document.addEventListener('DOMContentLoaded', function() {
         setupCommunityStorage();
         setupTimestampRefresh();
         
-        // Initialize WebSocket connection for real-time updates
-        initWebSocketConnection();
-        
         // Check for any URL parameters
         const urlParams = new URLSearchParams(window.location.search);
         const showCoursesParam = urlParams.get('showCourses');
@@ -1437,77 +1400,6 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Initialize community grid with classes to match courses-grid
         communityGrid.classList.add('courses-grid');
-    }
-    
-    // Initialize WebSocket connection
-    function initWebSocketConnection() {
-        // Close existing connection if any
-        if (window.ws) {
-            try {
-                window.ws.close();
-            } catch (e) {
-                console.error('Error closing existing WebSocket connection:', e);
-            }
-            window.ws = null;
-        }
-
-        // Connect to the server
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const host = window.location.hostname;
-        const port = window.location.port || (protocol === 'wss:' ? '443' : '80');
-        const wsUrl = `${protocol}//${host}:${port}`;
-        
-        try {
-            window.ws = new WebSocket(wsUrl);
-            
-            // Set up event handlers
-            window.ws.onopen = function() {
-                console.log('WebSocket connection established');
-                // Request community courses on connection
-                window.ws.send(JSON.stringify({
-                    type: 'getCommunityCourses'
-                }));
-            };
-            
-            window.ws.onclose = function() {
-                console.log('WebSocket connection closed');
-                window.ws = null;
-            };
-            
-            window.ws.onerror = function(error) {
-                console.error('WebSocket error:', error);
-            };
-            
-            window.ws.onmessage = function(event) {
-                try {
-                    const message = JSON.parse(event.data);
-                    console.log('WebSocket message received:', message.type);
-                    
-                    if (message.type === 'communityCourses') {
-                        // Save to localStorage for offline access
-                        localStorage.setItem('communityCourses', JSON.stringify(message.data));
-                        
-                        // Update courses if we're viewing the community section
-                        if (communityCoursesOverlay.classList.contains('active')) {
-                            // Set the community courses from loaded data
-                            communityCourses = message.data;
-                            
-                            // Update the grid with loaded courses
-                            updateCommunityGrid();
-                        }
-                        
-                        // Dispatch event to notify any listeners
-                        window.dispatchEvent(new CustomEvent('communityCoursesUpdated', {
-                            detail: { courses: message.data }
-                        }));
-                    }
-                } catch (error) {
-                    console.error('Error handling WebSocket message:', error);
-                }
-            };
-        } catch (error) {
-            console.error('Error creating WebSocket connection:', error);
-        }
     }
     
     // Call init to start everything
@@ -1547,23 +1439,49 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
         `;
         
-        // Function to handle loaded courses data
-        function handleLoadedCourses(loadedCourses) {
-            // Ensure all courses have a valid created/dateCreated field
-            loadedCourses = loadedCourses.map(course => {
-                if (!course.created && !course.dateCreated) {
-                    // If neither field exists, set them to current time
-                    course.created = new Date().toISOString();
-                    course.dateCreated = course.created;
-                } else if (!course.created) {
-                    // If only dateCreated exists, copy it to created
-                    course.created = course.dateCreated;
-                } else if (!course.dateCreated) {
-                    // If only created exists, copy it to dateCreated
-                    course.dateCreated = course.created;
+        // Check if WebSocket connection is available
+        if (window.socket && window.socket.readyState === WebSocket.OPEN) {
+            // Request community courses from the server
+            window.socket.send(JSON.stringify({
+                type: 'getCommunityCourses'
+            }));
+        } else {
+            // If WebSocket is not available, try to load from localStorage as fallback
+            console.warn('WebSocket not available, loading courses from localStorage as fallback');
+            loadCoursesFromLocalStorage();
+        }
+    }
+    
+    // Fallback function to load courses from localStorage
+    function loadCoursesFromLocalStorage() {
+        setTimeout(() => {
+            let loadedCourses = [];
+            
+            try {
+                const storedCourses = localStorage.getItem('communityCourses');
+                if (storedCourses) {
+                    loadedCourses = JSON.parse(storedCourses);
+                    console.log('Loaded stored community courses:', loadedCourses.length);
+                    
+                    // Ensure all courses have a valid created/dateCreated field
+                    loadedCourses = loadedCourses.map(course => {
+                        if (!course.created && !course.dateCreated) {
+                            // If neither field exists, set them to current time
+                            course.created = new Date().toISOString();
+                            course.dateCreated = course.created;
+                        } else if (!course.created) {
+                            // If only dateCreated exists, copy it to created
+                            course.created = course.dateCreated;
+                        } else if (!course.dateCreated) {
+                            // If only created exists, copy it to dateCreated
+                            course.dateCreated = course.created;
+                        }
+                        return course;
+                    });
                 }
-                return course;
-            });
+            } catch (e) {
+                console.error('Error loading community courses from localStorage:', e);
+            }
             
             // Set the community courses from loaded data
             communityCourses = loadedCourses;
@@ -1584,124 +1502,38 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                 `;
             }
-        }
-        
-        // Function to connect to WebSocket and request courses
-        function connectAndGetCourses() {
-            // Check if we already have a WebSocket connection
-            if (window.ws && window.ws.readyState === WebSocket.OPEN) {
-                // Request community courses
-                window.ws.send(JSON.stringify({
-                    type: 'getCommunityCourses'
-                }));
-                return true;
-            } else {
-                return false;
-            }
-        }
-        
-        // Function to initialize WebSocket if needed
-        function initWebSocket() {
-            // Close existing connection if any
-            if (window.ws) {
-                try {
-                    window.ws.close();
-                } catch (e) {
-                    console.error('Error closing existing WebSocket connection:', e);
+        }, 500);
+    }
+    
+    // Function to handle WebSocket messages for community courses
+    function handleSocketMessage(event) {
+        try {
+            const message = JSON.parse(event.data);
+            
+            if (message.type === 'communityCourses') {
+                console.log('Received community courses from server:', message.data.length);
+                communityCourses = message.data;
+                
+                // Update the grid with loaded courses
+                updateCommunityGrid();
+                
+                // Set up filter and sort button listeners
+                setupCommunityFilterListeners();
+                
+                // If no courses found, show empty state
+                if (communityCourses.length === 0) {
+                    communityGrid.innerHTML = `
+                        <div class="empty-state">
+                            <h3>No courses available yet</h3>
+                            <p>Be the first to create and share a course!</p>
+                            <button class="menu-button" onclick="window.location.href='builder.html'">Create A Course</button>
+                        </div>
+                    `;
                 }
-                window.ws = null;
             }
-
-            // Connect to the server
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const host = window.location.hostname;
-            const port = window.location.port || (protocol === 'wss:' ? '443' : '80');
-            const wsUrl = `${protocol}//${host}:${port}`;
-            
-            try {
-                window.ws = new WebSocket(wsUrl);
-                
-                // Set up event handlers
-                window.ws.onopen = function() {
-                    console.log('WebSocket connection established');
-                    // Request community courses
-                    window.ws.send(JSON.stringify({
-                        type: 'getCommunityCourses'
-                    }));
-                };
-                
-                window.ws.onclose = function() {
-                    console.log('WebSocket connection closed');
-                    window.ws = null;
-                };
-                
-                window.ws.onerror = function(error) {
-                    console.error('WebSocket error:', error);
-                    // Fall back to localStorage
-                    fallbackToLocalStorage();
-                };
-                
-                window.ws.onmessage = function(event) {
-                    try {
-                        const message = JSON.parse(event.data);
-                        console.log('WebSocket message received:', message.type);
-                        
-                        if (message.type === 'communityCourses') {
-                            // Save to localStorage for offline access
-                            localStorage.setItem('communityCourses', JSON.stringify(message.data));
-                            // Process the received courses
-                            handleLoadedCourses(message.data);
-                        }
-                    } catch (error) {
-                        console.error('Error handling WebSocket message:', error);
-                        // Fall back to localStorage
-                        fallbackToLocalStorage();
-                    }
-                };
-                
-                return true;
-            } catch (error) {
-                console.error('Error creating WebSocket connection:', error);
-                // Fall back to localStorage
-                fallbackToLocalStorage();
-                return false;
-            }
+        } catch (e) {
+            console.error('Error processing WebSocket message:', e);
         }
-        
-        // Function to fall back to localStorage if WebSocket fails
-        function fallbackToLocalStorage() {
-            console.log('Falling back to localStorage for community courses');
-            let loadedCourses = [];
-            
-            try {
-                const storedCourses = localStorage.getItem('communityCourses');
-                if (storedCourses) {
-                    loadedCourses = JSON.parse(storedCourses);
-                    console.log('Loaded stored community courses:', loadedCourses.length);
-                }
-            } catch (e) {
-                console.error('Error loading community courses from localStorage:', e);
-            }
-            
-            // Handle the loaded courses
-            handleLoadedCourses(loadedCourses);
-        }
-        
-        // First try to use existing WebSocket connection
-        if (!connectAndGetCourses()) {
-            // If no connection, initialize a new one
-            if (!initWebSocket()) {
-                // If initialization fails, fall back to localStorage
-                fallbackToLocalStorage();
-            }
-        }
-        
-        // Listen for community courses updates from WebSocket
-        window.addEventListener('communityCoursesUpdated', function(event) {
-            if (event.detail && event.detail.courses) {
-                handleLoadedCourses(event.detail.courses);
-            }
-        });
     }
     
     // Generate mock community courses (for development/demo purposes)
@@ -2031,4 +1863,30 @@ document.addEventListener('DOMContentLoaded', function() {
         // Update every minute
         setInterval(updateAllTimestamps, 60000);
     }
+    
+    // Function to load community courses from data received via WebSocket
+    function loadCommunityCoursesFromData(courses) {
+        communityCourses = courses;
+        console.log('Setting community courses from data:', communityCourses.length);
+        
+        // Update the grid with loaded courses
+        updateCommunityGrid();
+        
+        // Set up filter and sort button listeners if not already set
+        setupCommunityFilterListeners();
+        
+        // If no courses found, show empty state
+        if (communityCourses.length === 0) {
+            communityGrid.innerHTML = `
+                <div class="empty-state">
+                    <h3>No courses available yet</h3>
+                    <p>Be the first to create and share a course!</p>
+                    <button class="menu-button" onclick="window.location.href='builder.html'">Create A Course</button>
+                </div>
+            `;
+        }
+    }
+    
+    // Make the function globally available
+    window.loadCommunityCoursesFromData = loadCommunityCoursesFromData;
 }); 
