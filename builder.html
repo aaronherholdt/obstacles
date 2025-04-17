@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Obstacle Course Builder</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="leaderboard.css">
+</head>
+<body>
+    <div id="ui-controls">
+        <div class="tool-wrapper">
+            <button id="placeButton" class="tool-button active" title="Place Block">
+                <svg class="tool-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                </svg>
+            </button>
+            <div id="material-dropdown" class="dropdown-content">
+                <div id="material1" class="dropdown-item" data-material="regular">
+                    <span class="color-preview" style="background-color: #FF8C00;"></span>
+                    <span>Regular</span>
+                </div>
+                <div id="material2" class="dropdown-item" data-material="ice">
+                    <span class="color-preview" style="background-color: #87CEFA;"></span>
+                    <span>Ice</span>
+                </div>
+                <div id="material3" class="dropdown-item" data-material="bouncy">
+                    <span class="color-preview" style="background-color: #FF4081;"></span>
+                    <span>Bouncy</span>
+                </div>
+                <div id="material4" class="dropdown-item" data-material="sticky">
+                    <span class="color-preview" style="background-color: #8BC34A;"></span>
+                    <span>Sticky</span>
+                </div>
+                <div id="material5" class="dropdown-item" data-material="explosion">
+                    <span class="color-preview" style="background-color: #FF5722;"></span>
+                    <span>Explosion</span>
+                </div>
+                <div id="material6" class="dropdown-item" data-material="teleport">
+                    <span class="color-preview" style="background-color: #9C27B0;"></span>
+                    <span>Teleport</span>
+                </div>
+            </div>
+        </div>
+        <button id="removeButton" class="tool-button" title="Remove Block">
+            <svg class="tool-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M15.14 3c-.51 0-1.02.2-1.41.59L2.59 14.73c-.78.77-.78 2.04 0 2.83l3.85 3.85c.39.39.9.59 1.41.59.51 0 1.02-.2 1.41-.59l11.14-11.14c.78-.77.78-2.04 0-2.83l-3.85-3.85c-.39-.39-.9-.59-1.41-.59zM5.5 19.5l-1-1 11-11 1 1-11 11z"/>
+            </svg>
+        </button>
+        <button id="saveButton" class="tool-button" title="Save Course">
+            <svg class="tool-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M17 3H5c-1.1 0-1.99.9-1.99 2L3 19c0 1.1.89 2 1.99 2H19c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
+            </svg>
+        </button>
+        <button id="loadButton" class="tool-button" title="Load Course">
+            <svg class="tool-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
+            </svg>
+        </button>
+        <button id="publishButton" class="tool-button" title="Publish to Community">
+            <svg class="tool-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/>
+            </svg>
+        </button>
+    </div>
+
+    <div id="props-selector">
+        <button id="startMarkerButton" class="prop-button" title="Place Start Marker">
+            <div class="prop-icon start-flag"></div>
+            <span>Start</span>
+        </button>
+        <button id="finishMarkerButton" class="prop-button" title="Place Finish Marker">
+            <div class="prop-icon finish-flag"></div>
+            <span>Finish</span>
+        </button>
+    </div>
+
+    <!-- This will be populated via JavaScript when in play mode -->
+    <div id="timer-container"></div>
+
+    <div id="mode-indicator">Mode: Place Block</div>
+
+    <!-- Add publish dialog to the DOM -->
+    <div id="publish-dialog" class="modal">
+        <div class="modal-content">
+            <h2>Publish Course to Community</h2>
+            <p>Share your obstacle course with the community!</p>
+            
+            <form id="publish-form">
+                <div class="form-group">
+                    <label for="course-title">Course Title *</label>
+                    <input type="text" id="course-title" required maxlength="40" placeholder="Give your course a name">
+                </div>
+                
+                <div class="form-group">
+                    <label for="course-author">Author Name *</label>
+                    <input type="text" id="course-author" required maxlength="20" placeholder="Your username">
+                </div>
+                
+                <div class="form-group">
+                    <label for="course-difficulty">Difficulty Level *</label>
+                    <select id="course-difficulty" required>
+                        <option value="Easy">Easy</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Hard">Hard</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="course-description">Description</label>
+                    <textarea id="course-description" maxlength="200" placeholder="Describe your course (optional)"></textarea>
+                </div>
+                
+                <div class="button-group">
+                    <button type="button" id="cancel-publish-btn" class="cancel-btn">Cancel</button>
+                    <button type="submit" id="submit-publish-btn" class="submit-btn">Publish Course</button>
+                </div>
+                
+                <div id="publish-status"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Mobile controls (hidden by default) -->
+    <div id="mobile-controls">
+        <div id="virtual-joystick">
+            <div id="joystick-knob"></div>
+        </div>
+        <div id="jump-button">
+            <svg id="jump-button-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path d="M8 12l4-4 4 4H8z"/>
+                <path d="M12 16V8"/>
+            </svg>
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "/vendor/three/build/three.module.js",
+                "three/addons/": "/vendor/three/examples/jsm/"
+            }
+        }
+    </script>
+    <script src="websocket.js"></script>
+    <script src="course-utils.js"></script>
+    <script src="leaderboard.js"></script>
+    <script>
+        function onCourseComplete(course) {
+            const courseId = course.id;   // e.g., 'first-steps'
+            const courseName = course.title || course.name; // Handle both formats for courses
+            
+            // Show leaderboard if we're NOT in editor mode, OR if we're explicitly in play mode
+            if (!window.location.href.includes('editor=true') || window.location.href.includes('mode=play')) {
+                window.leaderboardManager.showLeaderboardOverlay(courseId, courseName);
+            }
+        }
+    </script>
+    <script type="module" src="script.js"></script>
+
+    <!-- Error modal for marker distance validation -->
+    <div id="distance-error-modal" class="modal">
+        <div class="modal-content error-content">
+            <h2>Invalid Course Layout</h2>
+            <p id="distance-error-message"></p>
+            <div class="button-group">
+                <button type="button" id="close-error-btn" class="cancel-btn">Close</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
