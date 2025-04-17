@@ -31,7 +31,7 @@ let communityCourses = [];
 const leaderboardsPath = path.join(__dirname, 'leaderboards.json');
 
 // Path for storing community courses data
-const communityCoursesPath = path.join(__dirname, 'communityCourses.json');
+const communityCoursesPath = path.join(__dirname, 'community-courses-index.json');
 
 // Load existing leaderboard data if available
 try {
@@ -77,11 +77,16 @@ try {
     if (fs.existsSync(communityCoursesPath)) {
         const data = fs.readFileSync(communityCoursesPath, 'utf8');
         try {
-            communityCourses = JSON.parse(data);
-            console.log('Community courses loaded from file:', communityCourses.length);
+            const parsedData = JSON.parse(data);
             
-            // Validate the loaded data structure
-            if (!Array.isArray(communityCourses)) {
+            // Check if we have a courses array or direct array format
+            if (parsedData.courses && Array.isArray(parsedData.courses)) {
+                communityCourses = parsedData.courses;
+                console.log('Community courses loaded from file (courses array):', communityCourses.length);
+            } else if (Array.isArray(parsedData)) {
+                communityCourses = parsedData;
+                console.log('Community courses loaded from file (direct array):', communityCourses.length);
+            } else {
                 console.error('Invalid community courses data format, resetting to empty array');
                 communityCourses = [];
             }
@@ -124,7 +129,27 @@ function saveLeaderboards() {
 // Save community courses to file
 function saveCommunityCourses() {
     try {
-        fs.writeFileSync(communityCoursesPath, JSON.stringify(communityCourses, null, 2), 'utf8');
+        // Read the existing file to get the nextId if it exists
+        let nextId = 1000;
+        try {
+            if (fs.existsSync(communityCoursesPath)) {
+                const existingData = fs.readFileSync(communityCoursesPath, 'utf8');
+                const parsedData = JSON.parse(existingData);
+                if (parsedData.nextId) {
+                    nextId = parsedData.nextId;
+                }
+            }
+        } catch (error) {
+            console.error('Error reading existing community courses file for nextId:', error);
+        }
+        
+        // Create the data structure with courses array and nextId
+        const dataToSave = {
+            courses: communityCourses,
+            nextId: nextId
+        };
+        
+        fs.writeFileSync(communityCoursesPath, JSON.stringify(dataToSave, null, 2), 'utf8');
         console.log('Community courses saved to file');
     } catch (error) {
         console.error('Error saving community courses:', error);
@@ -237,9 +262,24 @@ function handlePublishCourse(course) {
         return;
     }
     
+    // Read the existing file to get the nextId
+    let nextId = 1000;
+    try {
+        if (fs.existsSync(communityCoursesPath)) {
+            const existingData = fs.readFileSync(communityCoursesPath, 'utf8');
+            const parsedData = JSON.parse(existingData);
+            if (parsedData.nextId) {
+                nextId = parsedData.nextId;
+            }
+        }
+    } catch (error) {
+        console.error('Error reading existing community courses file for nextId:', error);
+    }
+    
     // Generate a unique ID if not provided
     if (!course.id) {
-        course.id = Date.now();
+        course.id = nextId;
+        nextId++; // Increment for next use
     }
     
     // Set created date if not provided
@@ -270,8 +310,18 @@ function handlePublishCourse(course) {
         communityCourses.push(course);
     }
     
-    // Save updated courses
-    saveCommunityCourses();
+    // Update the nextId in the file when saving
+    try {
+        const dataToSave = {
+            courses: communityCourses,
+            nextId: nextId
+        };
+        fs.writeFileSync(communityCoursesPath, JSON.stringify(dataToSave, null, 2), 'utf8');
+        console.log('Community courses saved with new course');
+    } catch (error) {
+        console.error('Error saving community courses with new course:', error);
+        saveCommunityCourses(); // Fallback to regular save
+    }
     
     // Broadcast the updated courses to all clients
     broadcastCommunityCourses();
