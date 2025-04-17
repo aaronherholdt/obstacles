@@ -150,6 +150,15 @@
             const courseId = course.id;   // e.g., 'first-steps'
             const courseName = course.title || course.name; // Handle both formats for courses
             
+            // Skip leaderboard in test mode (editor=true), only show in play mode (mode=play)
+            // Check for URL params to see if we're in test mode
+            const urlParams = new URLSearchParams(window.location.search);
+            const isTestMode = !urlParams.get('mode') || urlParams.get('mode') !== 'play';
+            
+            if (isTestMode) {
+                return; // Skip showing leaderboard in test mode
+            }
+            
             // Show leaderboard if we're NOT in editor mode, OR if we're explicitly in play mode
             if (!window.location.href.includes('editor=true') || window.location.href.includes('mode=play')) {
                 window.leaderboardManager.showLeaderboardOverlay(courseId, courseName);
