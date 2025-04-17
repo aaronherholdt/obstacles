@@ -4,94 +4,6 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { MOUSE } from 'three'; // Import MOUSE enum
 import { Character } from './character.js'; // Import Character class
 
-// WebSocket connection
-window.ws = null;
-
-// Function to connect to WebSocket
-function connectToWebSocket(onSuccess, onError) {
-    // Close existing connection if any
-    if (window.ws) {
-        try {
-            window.ws.close();
-        } catch (e) {
-            console.error('Error closing existing WebSocket connection:', e);
-        }
-        window.ws = null;
-    }
-
-    // Connect to the server
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.hostname;
-    const port = window.location.port || (protocol === 'wss:' ? '443' : '80');
-    const wsUrl = `${protocol}//${host}:${port}`;
-    
-    try {
-        window.ws = new WebSocket(wsUrl);
-        
-        // Set up event handlers
-        window.ws.onopen = function() {
-            console.log('WebSocket connection established');
-            if (onSuccess) onSuccess();
-        };
-        
-        window.ws.onclose = function() {
-            console.log('WebSocket connection closed');
-            window.ws = null;
-        };
-        
-        window.ws.onerror = function(error) {
-            console.error('WebSocket error:', error);
-            if (onError) onError(error);
-            window.ws = null;
-        };
-        
-        window.ws.onmessage = function(event) {
-            try {
-                const message = JSON.parse(event.data);
-                console.log('WebSocket message received:', message.type);
-                
-                switch (message.type) {
-                    case 'leaderboard':
-                        // Handle leaderboard updates
-                        if (window.leaderboardManager) {
-                            window.leaderboardManager.updateLeaderboard(message.courseId, message.data);
-                        }
-                        break;
-                        
-                    case 'leaderboards':
-                        // Handle all leaderboards
-                        if (window.leaderboardManager) {
-                            window.leaderboardManager.updateAllLeaderboards(message.data);
-                        }
-                        break;
-                        
-                    case 'communityCourses':
-                        // Handle community courses updates
-                        localStorage.setItem('communityCourses', JSON.stringify(message.data));
-                        // Dispatch event to notify any listeners
-                        window.dispatchEvent(new CustomEvent('communityCoursesUpdated', {
-                            detail: { courses: message.data }
-                        }));
-                        break;
-                        
-                    default:
-                        console.log('Unknown message type:', message.type);
-                }
-            } catch (error) {
-                console.error('Error handling WebSocket message:', error);
-            }
-        };
-    } catch (error) {
-        console.error('Error creating WebSocket connection:', error);
-        if (onError) onError(error);
-    }
-}
-
-// Try to connect when the page loads
-document.addEventListener('DOMContentLoaded', function() {
-    connectToWebSocket();
-});
-
 // Variables for timer functionality
 let timerStartTime = 0;
 let timerInterval = null;
@@ -569,70 +481,57 @@ if (publishButton && publishDialog && publishForm && cancelPublishBtn) {
             data: courseData
         };
         
-        // Show status message
-        const statusElem = document.getElementById('publish-status');
-        statusElem.textContent = 'Publishing course...';
-        statusElem.style.color = 'blue';
-        
-        // Save to localStorage as fallback
-        try {
-            // Get existing courses
-            let communityCourses = [];
-            const savedCourses = localStorage.getItem('communityCourses');
-            if (savedCourses) {
-                communityCourses = JSON.parse(savedCourses);
-            }
-            
-            // Add the new course to local storage for offline access
-            communityCourses.push(course);
-            localStorage.setItem('communityCourses', JSON.stringify(communityCourses));
-        } catch (error) {
-            console.error("Error saving course to localStorage:", error);
-        }
-        
-        // Check for WebSocket connection
-        if (window.ws && window.ws.readyState === WebSocket.OPEN) {
-            // Send course to server via WebSocket
-            window.ws.send(JSON.stringify({
+        // Publish the course via WebSocket if available
+        if (window.socket && window.socket.readyState === WebSocket.OPEN) {
+            // Send course to server
+            window.socket.send(JSON.stringify({
                 type: 'publishCourse',
                 course: course
             }));
             
-            // Show success message
-            statusElem.textContent = 'Course published successfully!';
-            statusElem.style.color = 'green';
+            // Show status message
+            document.getElementById('publish-status').textContent = 'Course published successfully!';
+            document.getElementById('publish-status').style.color = 'green';
             
             // Close the dialog after a short delay
             setTimeout(() => {
                 publishDialog.classList.remove('active');
             }, 1500);
         } else {
-            // Attempt to connect to WebSocket server and then send
-            connectToWebSocket(() => {
-                // Send course to server via WebSocket
-                window.ws.send(JSON.stringify({
-                    type: 'publishCourse',
-                    course: course
-                }));
+            // Fallback to localStorage if WebSocket is not available
+            console.warn('WebSocket not available, saving to localStorage as fallback');
+            
+            // Try to get the community courses from localStorage
+            let communityCourses = [];
+            try {
+                const savedCourses = localStorage.getItem('communityCourses');
+                if (savedCourses) {
+                    communityCourses = JSON.parse(savedCourses);
+                }
+            } catch (error) {
+                console.error("Error loading community courses:", error);
+            }
+            
+            // Add the new course
+            communityCourses.push(course);
+            
+            // Save back to localStorage
+            try {
+                localStorage.setItem('communityCourses', JSON.stringify(communityCourses));
                 
                 // Show success message
-                statusElem.textContent = 'Course published successfully!';
-                statusElem.style.color = 'green';
+                document.getElementById('publish-status').textContent = 'Course published successfully (offline mode)!';
+                document.getElementById('publish-status').style.color = 'green';
                 
                 // Close the dialog after a short delay
                 setTimeout(() => {
                     publishDialog.classList.remove('active');
                 }, 1500);
-            }, () => {
-                // Connection failed, but we saved locally
-                statusElem.textContent = 'Published locally (offline mode)';
-                statusElem.style.color = 'orange';
-                
-                // Close the dialog after a short delay
-                setTimeout(() => {
-                    publishDialog.classList.remove('active');
-                }, 1500);
-            });
+            } catch (error) {
+                console.error("Error saving community courses:", error);
+                document.getElementById('publish-status').textContent = 'Error publishing course: ' + error.message;
+                document.getElementById('publish-status').style.color = 'red';
+            }
         }
     });
 }
@@ -3166,24 +3065,7 @@ function updateCourseStats(courseId, incrementPlays = true, incrementLikes = fal
         return; // Not a community course or invalid ID
     }
     
-    // Update via WebSocket if available
-    if (window.ws && window.ws.readyState === WebSocket.OPEN) {
-        try {
-            window.ws.send(JSON.stringify({
-                type: 'updateCourseStats',
-                courseId: courseId,
-                incrementPlays: incrementPlays,
-                incrementLikes: incrementLikes
-            }));
-            console.log('Sent course stats update via WebSocket');
-            return true;
-        } catch (e) {
-            console.error('Error sending stats update via WebSocket:', e);
-            // Fall back to localStorage
-        }
-    }
-    
-    // Fall back to localStorage if WebSocket is not available
+    // Try to get community courses from localStorage
     try {
         const communityCourses = JSON.parse(localStorage.getItem('communityCourses') || '[]');
         
@@ -3204,7 +3086,6 @@ function updateCourseStats(courseId, incrementPlays = true, incrementLikes = fal
         // Save back to localStorage
         localStorage.setItem('communityCourses', JSON.stringify(communityCourses));
         
-        console.log('Updated course stats locally');
         return communityCourses[courseIndex];
     } catch (error) {
         console.error("Error updating course stats:", error);
